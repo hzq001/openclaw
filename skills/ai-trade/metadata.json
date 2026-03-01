@@ -1,0 +1,14 @@
+{
+  "project": "ai-trade",
+  "status": "integrated_skill",
+  "path": "/Users/huangziquan/mac-doc/code/open-source/openclaw/skills/ai-trade",
+  "capabilities": [
+    "listener",
+    "market_data",
+    "portfolio",
+    "health_check",
+    "historical_backfill",
+    "reports_vector_search",
+    "dynamic_topic_rules"
+  ]
+}

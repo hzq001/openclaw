@@ -22,11 +22,29 @@ import sys
 from pathlib import Path
 
 
-def get_api_key(provided_key: str | None) -> str | None:
-    """Get API key from argument first, then environment."""
+def get_api_key(provided_key: str | None, base_url: str) -> str | None:
+    """Resolve API key with stable, non-probing rules.
+
+    If base_url points to localhost (our OpenAI-compatible proxy), we must prefer
+    the proxy key; GEMINI_API_KEY is often unrelated and may cause 401.
+
+    Priority (localhost proxy):
+    1) --api-key
+    2) LOCAL_GEMINI_API_KEY
+    3) built-in default: 123456
+
+    Priority (non-local):
+    1) --api-key
+    2) GEMINI_API_KEY
+    3) LOCAL_GEMINI_API_KEY
+    """
     if provided_key:
         return provided_key
-    return os.environ.get("GEMINI_API_KEY")
+
+    if base_url.startswith("http://127.0.0.1") or base_url.startswith("http://localhost"):
+        return os.environ.get("LOCAL_GEMINI_API_KEY") or "123456"
+
+    return os.environ.get("GEMINI_API_KEY") or os.environ.get("LOCAL_GEMINI_API_KEY")
 
 
 def main():
@@ -58,18 +76,28 @@ def main():
     )
     parser.add_argument(
         "--api-key", "-k",
-        help="Gemini API key (overrides GEMINI_API_KEY env var)"
+        help="Gemini API key (overrides GEMINI_API_KEY/LOCAL_GEMINI_API_KEY env var)"
+    )
+
+    parser.add_argument(
+        "--base-url",
+        default=(
+            os.environ.get("GEMINI_BASE_URL")
+            or os.environ.get("LOCAL_GEMINI_BASE_URL")
+            or "http://127.0.0.1:8317"
+        ),
+        help=(
+            "Gemini API base URL. Defaults to http://127.0.0.1:8317 for local proxy use. "
+            "Override via --base-url or GEMINI_BASE_URL/LOCAL_GEMINI_BASE_URL."
+        )
     )
 
     args = parser.parse_args()
 
     # Get API key
-    api_key = get_api_key(args.api_key)
+    api_key = get_api_key(args.api_key, args.base_url)
     if not api_key:
-        print("Error: No API key provided.", file=sys.stderr)
-        print("Please either:", file=sys.stderr)
-        print("  1. Provide --api-key argument", file=sys.stderr)
-        print("  2. Set GEMINI_API_KEY environment variable", file=sys.stderr)
+        print("Error: missing API key", file=sys.stderr)
         sys.exit(1)
 
     # Import here after checking API key to avoid slow import on error
@@ -78,7 +106,13 @@ def main():
     from PIL import Image as PILImage
 
     # Initialise client
-    client = genai.Client(api_key=api_key)
+    # Support local proxy servers by overriding the base URL.
+    http_options = None
+    if args.base_url:
+        http_options = types.HttpOptions(baseUrl=args.base_url)
+        print(f"Using custom base URL: {args.base_url}")
+
+    client = genai.Client(api_key=api_key, http_options=http_options)
 
     # Set up output path
     output_path = Path(args.filename)
@@ -127,15 +161,23 @@ def main():
         print(f"Generating image with resolution {output_resolution}...")
 
     try:
+        # Stable mode: do NOT attempt protocol probing.
+        # Always use Google GenAI SDK against the configured base URL.
+        # Model name can vary by proxy/provider; allow override.
+        # Defaults to a model that is commonly available on the local proxy.
+        model_name = (
+            os.environ.get("GEMINI_IMAGE_MODEL")
+            or os.environ.get("GEMINI_MODEL")
+            or "gemini-3.1-flash-image"
+        )
+
         response = client.models.generate_content(
-            model="gemini-3-pro-image-preview",
+            model=model_name,
             contents=contents,
             config=types.GenerateContentConfig(
                 response_modalities=["TEXT", "IMAGE"],
-                image_config=types.ImageConfig(
-                    image_size=output_resolution
-                )
-            )
+                image_config=types.ImageConfig(image_size=output_resolution),
+            ),
         )
 
         # Process response and convert to PNG
@@ -177,7 +219,11 @@ def main():
             sys.exit(1)
 
     except Exception as e:
-        print(f"Error generating image: {e}", file=sys.stderr)
+        # Keep errors short and actionable (avoid noisy stack traces).
+        msg = str(e)
+        if len(msg) > 800:
+            msg = msg[:800] + "…"
+        print(f"Error generating image (genai-sdk): {msg}", file=sys.stderr)
         sys.exit(1)
 
 

@@ -1,3 +1,71 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What Is OpenClaw
+
+OpenClaw is a self-hosted personal AI assistant gateway. It runs on your devices, receives messages from multiple messaging channels (WhatsApp, Telegram, Slack, Discord, Signal, iMessage, Google Chat, Teams, etc.), routes them to AI agents/providers, and delivers replies back through the same channel. The **Gateway** is the control plane; the **assistant** is the product.
+
+## High-Level Architecture
+
+```
+Messaging Channels (Telegram/WhatsApp/Slack/Discord/Signal/iMessage/…)
+        │
+        ▼
+  Channel Handlers (src/telegram, src/discord, src/slack, src/signal, src/imessage, src/web, extensions/*)
+        │  Message normalization + routing
+        ▼
+  Gateway (src/gateway/)          ← Core runtime: auth, session, agent calls, control-plane
+        │  ├─ Auth + pairing       src/gateway/auth.ts, src/pairing/
+        │  ├─ Routing              src/routing/   (account lookup, session key, route resolution)
+        │  ├─ Agent calls          src/agents/    (LLM calls, tool use, auth-profile rotation)
+        │  ├─ Channel registry     src/channels/  (allowlists, command gating, channel config)
+        │  └─ Control UI           src/gateway/control-ui.ts  (web dashboard, CSP)
+        │
+        ├─ Providers (src/providers/)   ← Model auth adapters (GitHub Copilot, Qwen portal, Google…)
+        ├─ Memory (src/memory/)         ← Embeddings, batch ops, vector store
+        ├─ Hooks (src/hooks/)           ← User-defined hook scripts (Gmail, install hooks…)
+        ├─ ACP (src/acp/)               ← Agent-Client Protocol server/session bridge
+        ├─ Media (src/media/)           ← Media pipeline (audio/video/image processing)
+        └─ Web UI (ui/)                 ← Vite/Lit frontend (control dashboard)
+
+CLI (src/cli/ + src/commands/)
+  └─ Wires all subcommands (gateway, agent, message, channels, config, plugins, nodes, …)
+     Dependency injection via createDefaultDeps (src/cli/deps.ts)
+
+Plugin SDK (src/plugin-sdk/ → dist/plugin-sdk/)
+  └─ Public API surface for extensions. Extensions live under extensions/* (pnpm workspace packages).
+
+Native Apps
+  apps/macos/   – Swift/SwiftUI menubar app (runs Gateway as embedded process, uses protocol.schema.json)
+  apps/ios/     – Swift/SwiftUI iOS app (XcodeGen)
+  apps/android/ – Kotlin/Gradle Android app
+  apps/shared/  – OpenClawKit Swift framework (shared macOS+iOS logic)
+```
+
+### Key Data-Flow Invariants
+
+- All message routing goes through `src/routing/resolve-route.ts` → account + session key lookup.
+- Channel handlers must call the shared allowlist/command-gating logic in `src/channels/` — don't bypass.
+- Never send partial/streaming replies to external channels (WhatsApp, Telegram). Buffer to final reply only.
+- AI model calls go through `src/agents/` auth-profile rotation; do not call provider APIs directly.
+- macOS ↔ Gateway IPC uses the typed protocol in `dist/protocol.schema.json` (regenerate with `pnpm protocol:gen`).
+
+### Single-Test Runs
+
+```bash
+# Run a single test file
+pnpm vitest run src/routing/resolve-route.test.ts
+
+# Run unit tests only (fast, excludes gateway + extensions)
+pnpm test:fast
+
+# Run a specific test by name pattern
+pnpm vitest run --testNamePattern "resolves account"
+```
+
+---
+
 # Repository Guidelines
 
 - Repo: https://github.com/openclaw/openclaw
