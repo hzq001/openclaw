@@ -7,8 +7,7 @@ metadata:
     "openclaw":
       {
         "emoji": "🍌",
-        "requires": { "bins": ["uv"], "env": ["GEMINI_API_KEY"] },
-        "primaryEnv": "GEMINI_API_KEY",
+        "requires": { "bins": ["uv"], "env": [] },
         "install":
           [
             {
@@ -45,10 +44,27 @@ Multi-image composition (up to 14 images)
 uv run {baseDir}/scripts/generate_image.py --prompt "combine these into one scene" --filename "output.png" -i img1.png -i img2.png -i img3.png
 ```
 
-API key
+Local proxy defaults (baked in)
 
-- `GEMINI_API_KEY` env var
-- Or set `skills."nano-banana-pro".apiKey` / `skills."nano-banana-pro".env.GEMINI_API_KEY` in `~/.openclaw/openclaw.json`
+This skill is configured to use a **local Gemini proxy** by default.
+
+Stability note
+
+- The script runs in a **stable mode** (no protocol probing). It uses the Google GenAI SDK against the configured base URL.
+- If you see `503 UNAVAILABLE` / `MODEL_CAPACITY_EXHAUSTED`, it usually means the upstream server is temporarily out of capacity — retry later.
+
+This skill is configured to use a **local Gemini proxy** by default:
+
+- Base URL: `http://127.0.0.1:8317`
+- Model: `gemini-3-pro-image-preview`
+- API key (default): `123456`
+
+So in the common case, you **do not need to set** `GEMINI_API_KEY`.
+
+Overrides (optional)
+
+- Pass `--api-key` / `--base-url` to the script, or
+- Set env vars: `GEMINI_API_KEY` / `LOCAL_GEMINI_API_KEY`, `GEMINI_BASE_URL` / `LOCAL_GEMINI_BASE_URL`.
 
 Notes
 

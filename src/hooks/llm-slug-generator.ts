@@ -61,7 +61,7 @@ Reply with ONLY the slug, nothing else. Examples: "vendor-pitch", "api-design", 
       prompt,
       provider,
       model,
-      timeoutMs: 15_000, // 15 second timeout
+      timeoutMs: 45_000, // 45 second timeout to reduce slug-gen timeouts on slower providers
       runId: `slug-gen-${Date.now()}`,
     });
 
