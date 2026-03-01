@@ -166,6 +166,37 @@ Notes:
 - If you run directly from TypeScript (`pnpm openclaw ...`), a rebuild is usually unnecessary, but **config migrations still apply** → run doctor.
 - Switching between global and git installs is easy: install the other flavor, then run `openclaw doctor` so the gateway service entrypoint is rewritten to the current install.
 
+### Source deploy (linked CLI, recommended)
+
+For source-based deployments, prefer a linked CLI so your shell command and
+service entrypoint stay aligned with the same repo checkout:
+
+```bash
+pnpm install
+pnpm build
+pnpm link --global
+openclaw gateway install --force
+openclaw gateway restart
+```
+
+Verification:
+
+```bash
+which openclaw
+openclaw --version
+openclaw gateway status
+```
+
+Expected result:
+
+- `which openclaw` points to your linked shim.
+- The shim resolves to your repo checkout (for example `.../open-source/openclaw/openclaw.mjs`).
+- `gateway status` command path points to your repo `dist/` output.
+
+If you recently ran `npm i -g openclaw` or `pnpm add -g openclaw`, run the
+linked flow again (`pnpm link --global` + `openclaw gateway install --force`)
+to avoid mixed install paths.
+
 ## Always Run: `openclaw doctor`
 
 Doctor is the “safe update” command. It’s intentionally boring: repair + migrate + warn.
