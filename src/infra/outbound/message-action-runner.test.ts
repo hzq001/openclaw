@@ -621,6 +621,36 @@ describe("runMessageAction sendAttachment hydration", () => {
     });
   });
 
+  it("allows local absolute path for sendAttachment when workspaceDir is explicit", async () => {
+    await restoreRealMediaLoader();
+    const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "msg-workspace-"));
+    try {
+      const mediaPath = path.join(workspaceDir, "pic.bin");
+      await fs.writeFile(mediaPath, Buffer.from("hello"));
+
+      const result = await runMessageAction({
+        cfg,
+        action: "sendAttachment",
+        params: {
+          channel: "bluebubbles",
+          target: "+15551234567",
+          media: mediaPath,
+          message: "caption",
+        },
+        workspaceDir,
+      });
+
+      expect(result.kind).toBe("action");
+      expect(result.payload).toMatchObject({
+        ok: true,
+        filename: "pic.bin",
+        caption: "caption",
+      });
+    } finally {
+      await fs.rm(workspaceDir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects local absolute path for setGroupIcon when sandboxRoot is missing", async () => {
     await expectRejectsLocalAbsolutePathWithoutSandbox({
       action: "setGroupIcon",

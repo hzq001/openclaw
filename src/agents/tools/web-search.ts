@@ -3,7 +3,6 @@ import { formatCliCommand } from "../../cli/command-format.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { normalizeResolvedSecretInputString } from "../../config/types.secrets.js";
 import { logVerbose } from "../../globals.js";
-import { fetchWithSsrFGuard } from "../../infra/net/fetch-guard.js";
 import { wrapWebContent } from "../../security/external-content.js";
 import { normalizeSecretInput } from "../../utils/normalize-secret-input.js";
 import type { AnyAgentTool } from "./common.js";
@@ -46,7 +45,6 @@ const KIMI_WEB_SEARCH_TOOL = {
 const SEARCH_CACHE = new Map<string, CacheEntry<Record<string, unknown>>>();
 const BRAVE_FRESHNESS_SHORTCUTS = new Set(["pd", "pw", "pm", "py"]);
 const BRAVE_FRESHNESS_RANGE = /^(\d{4}-\d{2}-\d{2})to(\d{4}-\d{2}-\d{2})$/;
-const TRUSTED_NETWORK_SSRF_POLICY = { dangerouslyAllowPrivateNetwork: true } as const;
 
 const WebSearchSchema = Type.Object({
   query: Type.String({ description: "Search query string." }),
@@ -605,7 +603,6 @@ function resolveGeminiModel(gemini?: GeminiConfig): string {
   return fromConfig || DEFAULT_GEMINI_MODEL;
 }
 
-<<<<<<< HEAD
 async function withTrustedWebSearchEndpoint<T>(
   params: {
     url: string;
@@ -624,8 +621,6 @@ async function withTrustedWebSearchEndpoint<T>(
   );
 }
 
-=======
->>>>>>> 4078d6e83 (chore: checkpoint local changes before source-upgrade merge)
 async function runGeminiSearch(params: {
   query: string;
   apiKey: string;
@@ -634,52 +629,66 @@ async function runGeminiSearch(params: {
 }): Promise<{ content: string; citations: Array<{ url: string; title?: string }> }> {
   const endpoint = `${GEMINI_API_BASE}/models/${params.model}:generateContent`;
 
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": params.apiKey,
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [{ text: params.query }],
+  return withTrustedWebSearchEndpoint(
+    {
+      url: endpoint,
+      timeoutSeconds: params.timeoutSeconds,
+      init: {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": params.apiKey,
         },
-      ],
-      tools: [{ google_search: {} }],
-    }),
-    signal: withTimeout(undefined, params.timeoutSeconds * 1000),
-  });
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: params.query }],
+            },
+          ],
+          tools: [{ google_search: {} }],
+        }),
+      },
+    },
+    async (res) => {
+      if (!res.ok) {
+        const detailResult = await readResponseText(res, { maxBytes: 64_000 });
+        // Strip API key from any error detail to prevent accidental key leakage in logs
+        const safeDetail = (detailResult.text || res.statusText).replace(
+          /key=[^&\s]+/gi,
+          "key=***",
+        );
+        throw new Error(`Gemini API error (${res.status}): ${safeDetail}`);
+      }
 
-  if (!res.ok) {
-    const detailResult = await readResponseText(res, { maxBytes: 64_000 });
-    // Strip API key from any error detail to prevent accidental key leakage in logs
-    const safeDetail = (detailResult.text || res.statusText).replace(/key=[^&\s]+/gi, "key=***");
-    throw new Error(`Gemini API error (${res.status}): ${safeDetail}`);
-  }
+      let data: GeminiGroundingResponse;
+      try {
+        data = (await res.json()) as GeminiGroundingResponse;
+      } catch (err) {
+        const safeError = String(err).replace(/key=[^&\s]+/gi, "key=***");
+        throw new Error(`Gemini API returned invalid JSON: ${safeError}`, { cause: err });
+      }
 
-  let data: GeminiGroundingResponse;
-  try {
-    data = (await res.json()) as GeminiGroundingResponse;
-  } catch (err) {
-    const safeError = String(err).replace(/key=[^&\s]+/gi, "key=***");
-    throw new Error(`Gemini API returned invalid JSON: ${safeError}`, { cause: err });
-  }
+      if (data.error) {
+        const rawMsg = data.error.message || data.error.status || "unknown";
+        const safeMsg = rawMsg.replace(/key=[^&\s]+/gi, "key=***");
+        throw new Error(`Gemini API error (${data.error.code}): ${safeMsg}`);
+      }
 
-  if (data.error) {
-    const rawMsg = data.error.message || data.error.status || "unknown";
-    const safeMsg = rawMsg.replace(/key=[^&\s]+/gi, "key=***");
-    throw new Error(`Gemini API error (${data.error.code}): ${safeMsg}`);
-  }
+      const candidate = data.candidates?.[0];
+      const content =
+        candidate?.content?.parts
+          ?.map((p) => p.text)
+          .filter(Boolean)
+          .join("\n") ?? "No response";
 
-  const candidate = data.candidates?.[0];
-  const content =
-    candidate?.content?.parts
-      ?.map((p) => p.text)
-      .filter(Boolean)
-      .join("\n") ?? "No response";
+      const groundingChunks = candidate?.groundingMetadata?.groundingChunks ?? [];
+      const rawCitations = groundingChunks
+        .filter((chunk) => chunk.web?.uri)
+        .map((chunk) => ({
+          url: chunk.web!.uri!,
+          title: chunk.web?.title || undefined,
+        }));
 
-<<<<<<< HEAD
       // Resolve Google grounding redirect URLs to direct URLs with concurrency cap.
       // Gemini typically returns 3-8 citations; cap at 10 concurrent to be safe.
       const MAX_CONCURRENT_REDIRECTS = 10;
@@ -694,61 +703,11 @@ async function runGeminiSearch(params: {
         );
         citations.push(...resolved);
       }
-=======
-  const groundingChunks = candidate?.groundingMetadata?.groundingChunks ?? [];
-  const rawCitations = groundingChunks
-    .filter((chunk) => chunk.web?.uri)
-    .map((chunk) => ({
-      url: chunk.web!.uri!,
-      title: chunk.web?.title || undefined,
-    }));
->>>>>>> 4078d6e83 (chore: checkpoint local changes before source-upgrade merge)
 
-  // Resolve Google grounding redirect URLs to direct URLs with concurrency cap.
-  // Gemini typically returns 3-8 citations; cap at 10 concurrent to be safe.
-  const MAX_CONCURRENT_REDIRECTS = 10;
-  const citations: Array<{ url: string; title?: string }> = [];
-  for (let i = 0; i < rawCitations.length; i += MAX_CONCURRENT_REDIRECTS) {
-    const batch = rawCitations.slice(i, i + MAX_CONCURRENT_REDIRECTS);
-    const resolved = await Promise.all(
-      batch.map(async (citation) => {
-        const resolvedUrl = await resolveRedirectUrl(citation.url);
-        return { ...citation, url: resolvedUrl };
-      }),
-    );
-    citations.push(...resolved);
-  }
-
-  return { content, citations };
+      return { content, citations };
+    },
+  );
 }
-
-<<<<<<< HEAD
-=======
-const REDIRECT_TIMEOUT_MS = 5000;
-
-/**
- * Resolve a redirect URL to its final destination using a HEAD request.
- * Returns the original URL if resolution fails or times out.
- */
-async function resolveRedirectUrl(url: string): Promise<string> {
-  try {
-    const { finalUrl, release } = await fetchWithSsrFGuard({
-      url,
-      init: { method: "HEAD" },
-      timeoutMs: REDIRECT_TIMEOUT_MS,
-      policy: TRUSTED_NETWORK_SSRF_POLICY,
-    });
-    try {
-      return finalUrl || url;
-    } finally {
-      await release();
-    }
-  } catch {
-    return url;
-  }
-}
-
->>>>>>> 4078d6e83 (chore: checkpoint local changes before source-upgrade merge)
 function resolveSearchCount(value: unknown, fallback: number): number {
   const parsed = typeof value === "number" && Number.isFinite(value) ? value : fallback;
   const clamped = Math.max(1, Math.min(MAX_SEARCH_COUNT, Math.floor(parsed)));

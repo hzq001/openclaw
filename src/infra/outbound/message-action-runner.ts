@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import { resolveSessionAgentId } from "../../agents/agent-scope.js";
 import {
@@ -96,10 +97,26 @@ export type RunMessageActionParams = {
   deps?: OutboundSendDeps;
   sessionKey?: string;
   agentId?: string;
+  workspaceDir?: string;
   sandboxRoot?: string;
   dryRun?: boolean;
   abortSignal?: AbortSignal;
 };
+
+function appendWorkspaceMediaRoot(
+  roots: readonly string[],
+  workspaceDir?: string,
+): readonly string[] {
+  const raw = workspaceDir?.trim();
+  if (!raw) {
+    return roots;
+  }
+  const resolved = path.resolve(raw);
+  if (roots.includes(resolved)) {
+    return roots;
+  }
+  return [...roots, resolved];
+}
 
 export type MessageActionRunResult =
   | {
@@ -729,7 +746,10 @@ export async function runMessageAction(
     params.accountId = accountId;
   }
   const dryRun = Boolean(input.dryRun ?? readBooleanParam(params, "dryRun"));
-  const mediaLocalRoots = getAgentScopedMediaLocalRoots(cfg, resolvedAgentId);
+  const mediaLocalRoots = appendWorkspaceMediaRoot(
+    getAgentScopedMediaLocalRoots(cfg, resolvedAgentId),
+    input.workspaceDir,
+  );
   const mediaPolicy = resolveAttachmentMediaPolicy({
     sandboxRoot: input.sandboxRoot,
     mediaLocalRoots,

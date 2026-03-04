@@ -15,7 +15,11 @@ import type { GatewayWsLogStyle } from "../../gateway/ws-logging.js";
 import { setGatewayWsLogStyle } from "../../gateway/ws-logging.js";
 import { setVerbose } from "../../globals.js";
 import { GatewayLockError } from "../../infra/gateway-lock.js";
-import { formatPortDiagnostics, inspectPortUsage } from "../../infra/ports.js";
+import {
+  classifyPortListener,
+  formatPortDiagnostics,
+  inspectPortUsage,
+} from "../../infra/ports.js";
 import { setConsoleSubsystemFilter, setConsoleTimestampPrefix } from "../../logging/console.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { defaultRuntime } from "../../runtime.js";
@@ -84,6 +88,10 @@ const GATEWAY_AUTH_MODES: readonly GatewayAuthMode[] = [
   "trusted-proxy",
 ];
 const GATEWAY_TAILSCALE_MODES: readonly GatewayTailscaleMode[] = ["off", "serve", "funnel"];
+
+function isAlreadyRunningGatewayError(message: string): boolean {
+  return /already listening|gateway already running/i.test(message);
+}
 
 function parseEnumOption<T extends string>(
   raw: string | undefined,
@@ -365,18 +373,34 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
       (err && typeof err === "object" && (err as { name?: string }).name === "GatewayLockError")
     ) {
       const errMessage = describeUnknownError(err);
+      let diagnostics: Awaited<ReturnType<typeof inspectPortUsage>> | null = null;
+      try {
+        diagnostics = await inspectPortUsage(port);
+      } catch {
+        diagnostics = null;
+      }
+      const hasGatewayListener =
+        diagnostics?.status === "busy"
+          ? diagnostics.listeners.some(
+              (listener) => classifyPortListener(listener, port) === "gateway",
+            )
+          : false;
+      if (isAlreadyRunningGatewayError(errMessage) && hasGatewayListener) {
+        defaultRuntime.log(
+          `Gateway already running on ws://127.0.0.1:${port}; reusing existing instance.`,
+        );
+        for (const line of formatPortDiagnostics(diagnostics)) {
+          defaultRuntime.log(line);
+        }
+        return;
+      }
       defaultRuntime.error(
         `Gateway failed to start: ${errMessage}\nIf the gateway is supervised, stop it with: ${formatCliCommand("openclaw gateway stop")}`,
       );
-      try {
-        const diagnostics = await inspectPortUsage(port);
-        if (diagnostics.status === "busy") {
-          for (const line of formatPortDiagnostics(diagnostics)) {
-            defaultRuntime.error(line);
-          }
+      if (diagnostics?.status === "busy") {
+        for (const line of formatPortDiagnostics(diagnostics)) {
+          defaultRuntime.error(line);
         }
-      } catch {
-        // ignore diagnostics failures
       }
       await maybeExplainGatewayServiceStop();
       defaultRuntime.exit(1);

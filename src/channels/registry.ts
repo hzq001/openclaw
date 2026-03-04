@@ -110,6 +110,7 @@ const CHAT_CHANNEL_META: Record<ChatChannelId, ChannelMeta> = {
 };
 
 export const CHAT_CHANNEL_ALIASES: Record<string, ChatChannelId> = {
+  tg: "telegram",
   imsg: "imessage",
   "internet-relay-chat": "irc",
   "google-chat": "googlechat",

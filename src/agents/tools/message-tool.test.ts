@@ -373,6 +373,24 @@ describe("message tool sandbox passthrough", () => {
     expect(call?.sandboxRoot).toBe(expected);
   });
 
+  it("forwards workspaceDir to runMessageAction", async () => {
+    mockSendResult({ to: "telegram:123" });
+
+    const tool = createMessageTool({
+      config: {} as never,
+      workspaceDir: "/tmp/workspace",
+    });
+
+    await tool.execute("1", {
+      action: "send",
+      target: "telegram:123",
+      message: "",
+    });
+
+    const call = mocks.runMessageAction.mock.calls[0]?.[0];
+    expect(call?.workspaceDir).toBe("/tmp/workspace");
+  });
+
   it("forwards trusted requesterSenderId to runMessageAction", async () => {
     mockSendResult({ to: "discord:123" });
 

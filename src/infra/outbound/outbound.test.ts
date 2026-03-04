@@ -166,6 +166,7 @@ describe("delivery-queue", () => {
       "Forbidden: bot was kicked from the group chat",
       "chat_id is empty",
       "Outbound not configured for channel: msteams",
+      "Local media path is not under an allowed directory: /tmp/image.png",
     ])("returns true for permanent error: %s", (msg) => {
       expect(isPermanentDeliveryError(msg)).toBe(true);
     });

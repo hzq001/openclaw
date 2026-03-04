@@ -1,0 +1,35 @@
+{
+  "name": "@openclaw/dingtalk",
+  "version": "2026.2.27",
+  "private": true,
+  "description": "OpenClaw DingTalk bot Stream/Webhook channel plugin",
+  "type": "module",
+  "peerDependencies": {
+    "openclaw": ">=2026.1.26"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "dingtalk",
+      "label": "DingTalk",
+      "selectionLabel": "DingTalk (Stream/Webhook)",
+      "detailLabel": "DingTalk Bot",
+      "docsPath": "/channels/dingtalk",
+      "docsLabel": "dingtalk",
+      "blurb": "DingTalk bot integration via Stream mode (no domain) or webhook mode.",
+      "aliases": [
+        "dingtalk",
+        "dingding"
+      ],
+      "order": 68,
+      "quickstartAllowFrom": true
+    },
+    "install": {
+      "npmSpec": "@openclaw/dingtalk",
+      "localPath": "extensions/dingtalk",
+      "defaultChoice": "npm"
+    }
+  }
+}
