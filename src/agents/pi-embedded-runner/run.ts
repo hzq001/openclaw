@@ -5,6 +5,7 @@ import { generateSecureToken } from "../../infra/secure-random.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import type { PluginHookBeforeAgentStartResult } from "../../plugins/types.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
+import { CommandLane } from "../../process/lanes.js";
 import { isMarkdownCapableMessageChannel } from "../../utils/message-channel.js";
 import { resolveOpenClawAgentDir } from "../agent-paths.js";
 import { hasConfiguredModelFallbacks } from "../agent-scope.js";
@@ -205,8 +206,19 @@ export async function runEmbeddedPiAgent(
 ): Promise<EmbeddedPiRunResult> {
   const sessionLane = resolveSessionLane(params.sessionKey?.trim() || params.sessionId);
   const globalLane = resolveGlobalLane(params.lane);
+  const cronLaneName: string = CommandLane.Cron;
+  const cronConcurrency = Math.max(1, Math.floor(params.config?.cron?.maxConcurrentRuns ?? 1));
+  const cronMaxQueueSize = Math.max(2, cronConcurrency * 2);
+  const cronLaneOpts =
+    globalLane === cronLaneName
+      ? {
+          // Prevent cron bursts from queuing large backlogs that later time out in lane=cron.
+          maxQueueSize: cronMaxQueueSize,
+        }
+      : undefined;
   const enqueueGlobal =
-    params.enqueue ?? ((task, opts) => enqueueCommandInLane(globalLane, task, opts));
+    params.enqueue ??
+    ((task, opts) => enqueueCommandInLane(globalLane, task, { ...opts, ...cronLaneOpts }));
   const enqueueSession =
     params.enqueue ?? ((task, opts) => enqueueCommandInLane(sessionLane, task, opts));
   const channelHint = params.messageChannel ?? params.messageProvider;

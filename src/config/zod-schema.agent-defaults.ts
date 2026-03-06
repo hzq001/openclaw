@@ -26,6 +26,10 @@ export const AgentDefaultsSchema = z
         z.string(),
         z
           .object({
+            // Compatibility shorthand for model-only keys; normalized into provider/model key.
+            provider: z.string().optional(),
+            // Compatibility shorthand for model-only keys; normalized into provider/model key.
+            model: z.string().optional(),
             alias: z.string().optional(),
             /** Provider-specific API parameters (e.g., GLM-4.7 thinking mode). */
             params: z.record(z.string(), z.unknown()).optional(),

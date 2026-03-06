@@ -23,6 +23,16 @@ export class GatewayDrainingError extends Error {
   }
 }
 
+/**
+ * Dedicated error type thrown when a lane reaches its queue limit.
+ */
+export class LaneQueueLimitExceededError extends Error {
+  constructor(lane: string, limit: number) {
+    super(`Command lane "${lane}" queue limit reached (${limit})`);
+    this.name = "LaneQueueLimitExceededError";
+  }
+}
+
 // Set while gateway is draining for restart; new enqueues are rejected.
 let gatewayDraining = false;
 
@@ -164,6 +174,7 @@ export function enqueueCommandInLane<T>(
   opts?: {
     warnAfterMs?: number;
     onWait?: (waitMs: number, queuedAhead: number) => void;
+    maxQueueSize?: number;
   },
 ): Promise<T> {
   if (gatewayDraining) {
@@ -172,6 +183,13 @@ export function enqueueCommandInLane<T>(
   const cleaned = lane.trim() || CommandLane.Main;
   const warnAfterMs = opts?.warnAfterMs ?? 2_000;
   const state = getLaneState(cleaned);
+  if (typeof opts?.maxQueueSize === "number" && Number.isFinite(opts.maxQueueSize)) {
+    const normalizedLimit = Math.max(1, Math.floor(opts.maxQueueSize));
+    const queued = state.queue.length + state.activeTaskIds.size;
+    if (queued >= normalizedLimit) {
+      return Promise.reject(new LaneQueueLimitExceededError(cleaned, normalizedLimit));
+    }
+  }
   return new Promise<T>((resolve, reject) => {
     state.queue.push({
       task: () => task(),
@@ -191,6 +209,7 @@ export function enqueueCommand<T>(
   opts?: {
     warnAfterMs?: number;
     onWait?: (waitMs: number, queuedAhead: number) => void;
+    maxQueueSize?: number;
   },
 ): Promise<T> {
   return enqueueCommandInLane(CommandLane.Main, task, opts);

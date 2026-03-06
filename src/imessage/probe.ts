@@ -1,3 +1,6 @@
+import { constants as fsConstants } from "node:fs";
+import fs from "node:fs/promises";
+import os from "node:os";
 import type { BaseProbeResult } from "../channels/plugins/types.js";
 import { detectBinary } from "../commands/onboard-helpers.js";
 import { loadConfig } from "../config/config.js";
@@ -26,6 +29,21 @@ type RpcSupportResult = {
 };
 
 const rpcSupportCache = new Map<string, RpcSupportResult>();
+const DEFAULT_IMESSAGE_DB_PATH = `${os.homedir()}/Library/Messages/chat.db`;
+
+async function probeDbReadAccess(dbPath: string): Promise<IMessageProbe | undefined> {
+  try {
+    await fs.access(dbPath, fsConstants.R_OK);
+    return undefined;
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      fatal: true,
+      error: `imessage db permission check failed (${dbPath}): ${detail}`,
+    };
+  }
+}
 
 async function probeRpcSupport(cliPath: string, timeoutMs: number): Promise<RpcSupportResult> {
   const cached = rpcSupportCache.get(cliPath);
@@ -70,7 +88,8 @@ export async function probeIMessage(
 ): Promise<IMessageProbe> {
   const cfg = opts.cliPath || opts.dbPath ? undefined : loadConfig();
   const cliPath = opts.cliPath?.trim() || cfg?.channels?.imessage?.cliPath?.trim() || "imsg";
-  const dbPath = opts.dbPath?.trim() || cfg?.channels?.imessage?.dbPath?.trim();
+  const dbPath =
+    opts.dbPath?.trim() || cfg?.channels?.imessage?.dbPath?.trim() || DEFAULT_IMESSAGE_DB_PATH;
   // Use explicit timeout if provided, otherwise fall back to config, then default
   const effectiveTimeout =
     timeoutMs ?? cfg?.channels?.imessage?.probeTimeoutMs ?? DEFAULT_IMESSAGE_PROBE_TIMEOUT_MS;
@@ -87,6 +106,11 @@ export async function probeIMessage(
       error: rpcSupport.error ?? "imsg rpc unavailable",
       fatal: rpcSupport.fatal,
     };
+  }
+
+  const dbAccess = await probeDbReadAccess(dbPath);
+  if (dbAccess) {
+    return dbAccess;
   }
 
   const client = await createIMessageRpcClient({

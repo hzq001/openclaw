@@ -322,6 +322,28 @@ describe("command queue", () => {
     );
   });
 
+  it("rejects enqueue when lane queue exceeds maxQueueSize", async () => {
+    const lane = `queue-limit-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setCommandLaneConcurrency(lane, 1);
+    const deferred = createDeferred();
+
+    const first = enqueueCommandInLane(lane, async () => {
+      await deferred.promise;
+      return "first";
+    });
+    const second = enqueueCommandInLane(lane, async () => "second", {
+      maxQueueSize: 2,
+    });
+
+    await expect(
+      enqueueCommandInLane(lane, async () => "third", { maxQueueSize: 2 }),
+    ).rejects.toThrow(/queue limit/i);
+
+    deferred.resolve();
+    await expect(first).resolves.toBe("first");
+    await expect(second).resolves.toBe("second");
+  });
+
   it("does not affect already-active tasks after markGatewayDraining", async () => {
     const { task, release } = enqueueBlockedMainTask(async () => "ok");
     markGatewayDraining();

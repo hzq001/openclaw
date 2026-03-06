@@ -387,6 +387,8 @@ const PERMANENT_ERROR_PATTERNS: readonly RegExp[] = [
   /recipient is not a valid/i,
   /outbound not configured for channel/i,
   /local media path is not under an allowed directory/i,
+  /imessage automation denied/i,
+  /grant automation access.*messages/i,
 ];
 
 export function isPermanentDeliveryError(error: string): boolean {

@@ -9,6 +9,16 @@ import type {
 import type { MemorySearchConfig } from "./types.tools.js";
 
 export type AgentModelEntryConfig = {
+  /**
+   * Compatibility shorthand for config entries keyed by model id only.
+   * When both provider+model are set, OpenClaw normalizes the key to "provider/model".
+   */
+  provider?: string;
+  /**
+   * Compatibility shorthand for config entries keyed by model id only.
+   * When both provider+model are set, OpenClaw normalizes the key to "provider/model".
+   */
+  model?: string;
   alias?: string;
   /** Provider-specific API parameters (e.g., GLM-4.7 thinking mode). */
   params?: Record<string, unknown>;

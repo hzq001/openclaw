@@ -143,4 +143,54 @@ describe("applyModelDefaults", () => {
     const model = next.models?.providers?.myproxy?.models?.[0];
     expect(model?.api).toBe("openai-completions");
   });
+
+  it("normalizes shorthand model entries with provider/model fields", () => {
+    const cfg = {
+      agents: {
+        defaults: {
+          models: {
+            "glm-5": { provider: "unicom-cloud", model: "glm-5" },
+            "Qwen3.5-397B-A17B": { provider: "unicom-cloud", model: "Qwen3.5-397B-A17B" },
+            "DeepSeek-V3.1": { provider: "unicom-cloud", model: "DeepSeek-V3.1", alias: "ds-v31" },
+            "Qwen3-235B-A22B": { provider: "unicom-cloud", model: "Qwen3-235B-A22B" },
+          },
+        },
+      },
+    } satisfies OpenClawConfig;
+
+    const next = applyModelDefaults(cfg);
+    const models = next.agents?.defaults?.models ?? {};
+
+    expect(models["unicom-cloud/glm-5"]).toEqual({});
+    expect(models["unicom-cloud/Qwen3.5-397B-A17B"]).toEqual({});
+    expect(models["unicom-cloud/DeepSeek-V3.1"]).toEqual({ alias: "ds-v31" });
+    expect(models["unicom-cloud/Qwen3-235B-A22B"]).toEqual({});
+
+    expect(models["glm-5"]).toBeUndefined();
+    expect(models["Qwen3.5-397B-A17B"]).toBeUndefined();
+    expect(models["DeepSeek-V3.1"]).toBeUndefined();
+    expect(models["Qwen3-235B-A22B"]).toBeUndefined();
+  });
+
+  it("keeps canonical provider/model keys unchanged when shorthand fields are present", () => {
+    const cfg = {
+      agents: {
+        defaults: {
+          models: {
+            "unicom-cloud/glm-5": {
+              provider: "ignored-provider",
+              model: "ignored-model",
+              alias: "glm5",
+            },
+          },
+        },
+      },
+    } satisfies OpenClawConfig;
+
+    const next = applyModelDefaults(cfg);
+    const models = next.agents?.defaults?.models ?? {};
+
+    expect(models["unicom-cloud/glm-5"]).toEqual({ alias: "glm5" });
+    expect(models["ignored-provider/ignored-model"]).toBeUndefined();
+  });
 });

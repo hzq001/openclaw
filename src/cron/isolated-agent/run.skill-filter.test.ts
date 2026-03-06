@@ -207,30 +207,31 @@ describe("runCronIsolatedAgentTurn — skill filter", () => {
       expect(runParams.model).toBe("claude-sonnet-4-6");
     });
 
-    it("falls back to agent defaults when payload.model is not allowed", async () => {
+    it("returns error when payload.model is not allowed", async () => {
       resolveAllowedModelRefMock.mockReturnValueOnce({
         error: "model not allowed: anthropic/claude-sonnet-4-6",
       });
 
-      await runSkillFilterCase({
-        cfg: {
-          agents: {
-            defaults: {
-              model: { primary: "openai-codex/gpt-5.3-codex", fallbacks: defaultFallbacks },
+      const result = await runCronIsolatedAgentTurn(
+        makeSkillParams({
+          cfg: {
+            agents: {
+              defaults: {
+                model: { primary: "openai-codex/gpt-5.3-codex", fallbacks: defaultFallbacks },
+              },
             },
           },
-        },
-        job: makeSkillJob({
-          payload: { kind: "agentTurn", message: "test", model: "anthropic/claude-sonnet-4-6" },
+          job: makeSkillJob({
+            payload: { kind: "agentTurn", message: "test", model: "anthropic/claude-sonnet-4-6" },
+          }),
         }),
-      });
-      expect(logWarnMock).toHaveBeenCalledWith(
-        "cron: payload.model 'anthropic/claude-sonnet-4-6' not allowed, falling back to agent defaults",
       );
-      expectDefaultModelCall({
-        primary: "openai-codex/gpt-5.3-codex",
-        fallbacks: defaultFallbacks,
-      });
+      expect(result.status).toBe("error");
+      if (result.status === "error") {
+        expect(result.error).toContain("model not allowed");
+      }
+      expect(logWarnMock).not.toHaveBeenCalled();
+      expect(runWithModelFallbackMock).not.toHaveBeenCalled();
     });
 
     it("returns an error when payload.model is invalid", async () => {

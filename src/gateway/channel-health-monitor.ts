@@ -12,6 +12,8 @@ const log = createSubsystemLogger("gateway/health-monitor");
 const DEFAULT_CHECK_INTERVAL_MS = 5 * 60_000;
 const DEFAULT_MONITOR_STARTUP_GRACE_MS = 60_000;
 const DEFAULT_COOLDOWN_CYCLES = 2;
+const DEFAULT_STALE_SOCKET_COOLDOWN_CYCLES = 6;
+const DEFAULT_STALE_SOCKET_MAX_COOLDOWN_MS = 60 * 60_000;
 const DEFAULT_MAX_RESTARTS_PER_HOUR = 10;
 const ONE_HOUR_MS = 60 * 60_000;
 
@@ -41,6 +43,8 @@ export type ChannelHealthMonitorDeps = {
   staleEventThresholdMs?: number;
   timing?: Partial<ChannelHealthTimingPolicy>;
   cooldownCycles?: number;
+  staleSocketCooldownCycles?: number;
+  staleSocketMaxCooldownMs?: number;
   maxRestartsPerHour?: number;
   abortSignal?: AbortSignal;
 };
@@ -79,6 +83,8 @@ export function startChannelHealthMonitor(deps: ChannelHealthMonitorDeps): Chann
     channelManager,
     checkIntervalMs = DEFAULT_CHECK_INTERVAL_MS,
     cooldownCycles = DEFAULT_COOLDOWN_CYCLES,
+    staleSocketCooldownCycles = DEFAULT_STALE_SOCKET_COOLDOWN_CYCLES,
+    staleSocketMaxCooldownMs = DEFAULT_STALE_SOCKET_MAX_COOLDOWN_MS,
     maxRestartsPerHour = DEFAULT_MAX_RESTARTS_PER_HOUR,
     abortSignal,
   } = deps;
@@ -95,6 +101,16 @@ export function startChannelHealthMonitor(deps: ChannelHealthMonitorDeps): Chann
 
   function pruneOldRestarts(record: RestartRecord, now: number) {
     record.restartsThisHour = record.restartsThisHour.filter((r) => now - r.at < ONE_HOUR_MS);
+  }
+
+  function resolveRestartCooldownMs(reason: string, record: RestartRecord): number {
+    if (reason !== "stale-socket") {
+      return cooldownMs;
+    }
+    const staleBaseCooldown = staleSocketCooldownCycles * checkIntervalMs;
+    const exponent = Math.min(record.restartsThisHour.length, 3);
+    const scaledCooldown = staleBaseCooldown * 2 ** exponent;
+    return Math.min(staleSocketMaxCooldownMs, scaledCooldown);
   }
 
   async function runCheck() {
@@ -138,10 +154,6 @@ export function startChannelHealthMonitor(deps: ChannelHealthMonitorDeps): Chann
             restartsThisHour: [],
           };
 
-          if (now - record.lastRestartAt <= cooldownMs) {
-            continue;
-          }
-
           pruneOldRestarts(record, now);
           if (record.restartsThisHour.length >= maxRestartsPerHour) {
             log.warn?.(
@@ -151,6 +163,10 @@ export function startChannelHealthMonitor(deps: ChannelHealthMonitorDeps): Chann
           }
 
           const reason = resolveChannelRestartReason(status, health);
+          const restartCooldownMs = resolveRestartCooldownMs(reason, record);
+          if (now - record.lastRestartAt <= restartCooldownMs) {
+            continue;
+          }
 
           log.info?.(`[${channelId}:${accountId}] health-monitor: restarting (reason: ${reason})`);
 

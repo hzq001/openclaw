@@ -37,6 +37,26 @@ type PendingRequest = {
   timer?: NodeJS.Timeout;
 };
 
+const IMESSAGE_PERMISSION_DENIED_PATTERN = /permissionDenied\s*\(\s*path:\s*"([^"]+)"/i;
+const IMESSAGE_AUTOMATION_DENIED_PATTERN =
+  /(AppleScript failed:.*Messages.*\(-1743\))|(未获得授权将Apple事件发送给Messages。?\s*\(-1743\))/i;
+
+export function extractIMessagePermissionDenied(line: string): string | undefined {
+  const match = IMESSAGE_PERMISSION_DENIED_PATTERN.exec(line);
+  if (!match) {
+    return undefined;
+  }
+  const path = match[1] ?? "unknown";
+  return `imsg permission denied for Messages DB: ${path}. Grant Full Disk Access to the app running OpenClaw.`;
+}
+
+export function extractIMessageAutomationDenied(line: string): string | undefined {
+  if (!IMESSAGE_AUTOMATION_DENIED_PATTERN.test(line)) {
+    return undefined;
+  }
+  return "iMessage automation denied for Messages app. Grant Automation access so OpenClaw can control Messages.";
+}
+
 function isTestEnv(): boolean {
   if (process.env.NODE_ENV === "test") {
     return true;
@@ -190,6 +210,10 @@ export class IMessageRpcClient {
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       this.runtime?.error?.(`imsg rpc: failed to parse ${line}: ${detail}`);
+      const permissionDenied = extractIMessagePermissionDenied(line);
+      if (permissionDenied) {
+        this.failAll(new Error(permissionDenied));
+      }
       return;
     }
 
@@ -216,8 +240,18 @@ export class IMessageRpcClient {
           const detailText =
             typeof details === "string" ? details : JSON.stringify(details, null, 2);
           if (detailText) {
+            const automationDenied = extractIMessageAutomationDenied(detailText);
+            if (automationDenied) {
+              pending.reject(new Error(automationDenied));
+              return;
+            }
             suffixes.push(detailText);
           }
+        }
+        const automationDenied = extractIMessageAutomationDenied(baseMessage);
+        if (automationDenied) {
+          pending.reject(new Error(automationDenied));
+          return;
         }
         const msg = suffixes.length > 0 ? `${baseMessage}: ${suffixes.join(" ")}` : baseMessage;
         pending.reject(new Error(msg));

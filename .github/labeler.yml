@@ -261,3 +261,7 @@
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/talk-voice/**"
+"extensions: task-model-router":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "extensions/task-model-router/**"

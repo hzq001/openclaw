@@ -15,6 +15,7 @@ import { getMachineDisplayName } from "../../infra/machine-name.js";
 import { generateSecureToken } from "../../infra/secure-random.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { type enqueueCommand, enqueueCommandInLane } from "../../process/command-queue.js";
+import { CommandLane } from "../../process/lanes.js";
 import { isCronSessionKey, isSubagentSessionKey } from "../../routing/session-key.js";
 import { resolveSignalReactionLevel } from "../../signal/reaction-level.js";
 import { resolveTelegramInlineButtonsScope } from "../../telegram/inline-buttons.js";
@@ -755,8 +756,13 @@ export async function compactEmbeddedPiSession(
 ): Promise<EmbeddedPiCompactResult> {
   const sessionLane = resolveSessionLane(params.sessionKey?.trim() || params.sessionId);
   const globalLane = resolveGlobalLane(params.lane);
+  const cronLaneName: string = CommandLane.Cron;
+  const cronConcurrency = Math.max(1, Math.floor(params.config?.cron?.maxConcurrentRuns ?? 1));
+  const cronMaxQueueSize = Math.max(2, cronConcurrency * 2);
+  const cronLaneOpts = globalLane === cronLaneName ? { maxQueueSize: cronMaxQueueSize } : undefined;
   const enqueueGlobal =
-    params.enqueue ?? ((task, opts) => enqueueCommandInLane(globalLane, task, opts));
+    params.enqueue ??
+    ((task, opts) => enqueueCommandInLane(globalLane, task, { ...opts, ...cronLaneOpts }));
   return enqueueCommandInLane(sessionLane, () =>
     enqueueGlobal(async () => compactEmbeddedPiSessionDirect(params)),
   );

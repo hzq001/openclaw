@@ -167,6 +167,7 @@ describe("delivery-queue", () => {
       "chat_id is empty",
       "Outbound not configured for channel: msteams",
       "Local media path is not under an allowed directory: /tmp/image.png",
+      "iMessage automation denied for Messages app. Grant Automation access so OpenClaw can control Messages.",
     ])("returns true for permanent error: %s", (msg) => {
       expect(isPermanentDeliveryError(msg)).toBe(true);
     });

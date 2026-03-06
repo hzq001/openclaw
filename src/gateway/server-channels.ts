@@ -47,6 +47,10 @@ function isAccountEnabled(account: unknown): boolean {
   return enabled !== false;
 }
 
+function isFatalChannelError(err: unknown): boolean {
+  return Boolean(err && typeof err === "object" && (err as { fatal?: unknown }).fatal === true);
+}
+
 function resolveDefaultRuntime(channelId: ChannelId): ChannelAccountSnapshot {
   const plugin = getChannelPlugin(channelId);
   return plugin?.status?.defaultRuntime ?? { accountId: DEFAULT_ACCOUNT_ID };
@@ -232,9 +236,14 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
           setStatus: (next) => setRuntime(channelId, id, next),
           ...(channelRuntime ? { channelRuntime } : {}),
         });
+        let fatalExit = false;
         const trackedPromise = Promise.resolve(task)
           .catch((err) => {
             const message = formatErrorMessage(err);
+            fatalExit = isFatalChannelError(err);
+            if (fatalExit) {
+              manuallyStopped.add(rKey);
+            }
             setRuntime(channelId, id, { accountId: id, lastError: message });
             log.error?.(`[${id}] channel exited: ${message}`);
           })
@@ -247,6 +256,9 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
           })
           .then(async () => {
             if (manuallyStopped.has(rKey)) {
+              if (fatalExit) {
+                log.warn?.(`[${id}] auto-restart disabled after fatal channel error`);
+              }
               return;
             }
             const attempt = (restartAttempts.get(rKey) ?? 0) + 1;

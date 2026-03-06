@@ -4,9 +4,16 @@ import { probeIMessage } from "./probe.js";
 const detectBinaryMock = vi.hoisted(() => vi.fn());
 const runCommandWithTimeoutMock = vi.hoisted(() => vi.fn());
 const createIMessageRpcClientMock = vi.hoisted(() => vi.fn());
+const accessMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../commands/onboard-helpers.js", () => ({
   detectBinary: (...args: unknown[]) => detectBinaryMock(...args),
+}));
+
+vi.mock("node:fs/promises", () => ({
+  default: {
+    access: (...args: unknown[]) => accessMock(...args),
+  },
 }));
 
 vi.mock("../process/exec.js", () => ({
@@ -26,6 +33,7 @@ beforeEach(() => {
     signal: null,
     killed: false,
   });
+  accessMock.mockClear().mockResolvedValue(undefined);
   createIMessageRpcClientMock.mockClear();
 });
 
@@ -35,6 +43,26 @@ describe("probeIMessage", () => {
     expect(result.ok).toBe(false);
     expect(result.fatal).toBe(true);
     expect(result.error).toMatch(/rpc/i);
+    expect(createIMessageRpcClientMock).not.toHaveBeenCalled();
+  });
+
+  it("fails fast with fatal=true when Messages DB is not readable", async () => {
+    runCommandWithTimeoutMock.mockResolvedValueOnce({
+      stdout: "",
+      stderr: "",
+      code: 0,
+      signal: null,
+      killed: false,
+    });
+    accessMock.mockRejectedValueOnce(new Error("Operation not permitted"));
+
+    const result = await probeIMessage(1000, {
+      cliPath: "imsg-perm",
+      dbPath: "~/Library/Messages/chat.db",
+    });
+    expect(result.ok).toBe(false);
+    expect(result.fatal).toBe(true);
+    expect(result.error?.toLowerCase()).toContain("permission");
     expect(createIMessageRpcClientMock).not.toHaveBeenCalled();
   });
 });

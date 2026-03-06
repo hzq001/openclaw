@@ -458,5 +458,31 @@ describe("channel-health-monitor", () => {
       expect(manager.startChannel).toHaveBeenCalledWith("slack", "default");
       monitor.stop();
     });
+
+    it("uses extended cooldown for stale-socket restarts", async () => {
+      const now = Date.now();
+      const manager = createSlackSnapshotManager(
+        runningConnectedSlackAccount({
+          lastStartAt: now - STALE_THRESHOLD - 60_000,
+          lastEventAt: now - STALE_THRESHOLD - 30_000,
+        }),
+      );
+      const monitor = startDefaultMonitor(manager, {
+        checkIntervalMs: 1_000,
+        startupGraceMs: 0,
+        cooldownCycles: 1,
+        staleSocketCooldownCycles: 3,
+      });
+
+      await vi.advanceTimersByTimeAsync(1_100);
+      expect(manager.startChannel).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(2_100);
+      expect(manager.startChannel).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(5_300);
+      expect(manager.startChannel).toHaveBeenCalledTimes(2);
+      monitor.stop();
+    });
   });
 });

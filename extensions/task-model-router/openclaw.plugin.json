@@ -1,0 +1,28 @@
+{
+  "id": "task-model-router",
+  "name": "Task Model Router",
+  "description": "Route tasks to high/mid/low model tiers using before_model_resolve.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean" },
+      "highModel": { "type": "string" },
+      "midModels": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "lowModel": { "type": "string" },
+      "highKeywords": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "midKeywords": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "highMinChars": { "type": "number" },
+      "midMinChars": { "type": "number" }
+    }
+  }
+}
