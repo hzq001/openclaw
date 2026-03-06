@@ -39,6 +39,13 @@ export const AgentDefaultsSchema = z
           .strict(),
       )
       .optional(),
+    localModels: z
+      .object({
+        general: z.string().optional(),
+        coding: z.string().optional(),
+      })
+      .strict()
+      .optional(),
     workspace: z.string().optional(),
     repoRoot: z.string().optional(),
     skipBootstrap: z.boolean().optional(),

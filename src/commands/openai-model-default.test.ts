@@ -204,6 +204,22 @@ describe("applyOpenAICodexModelDefault", () => {
     expectPrimaryModelChanged(applied, OPENAI_CODEX_DEFAULT_MODEL);
   });
 
+  it("uses configured local coding model when model is unset", () => {
+    const cfg = {
+      agents: {
+        defaults: {
+          localModels: {
+            coding: "local/gpt-5.4",
+          },
+        },
+      },
+    } as OpenClawConfig;
+
+    const applied = applyOpenAICodexModelDefault(cfg);
+
+    expectPrimaryModelChanged(applied, "local/gpt-5.4");
+  });
+
   it("sets openai-codex default when model is openai/*", () => {
     const cfg: OpenClawConfig = {
       agents: { defaults: { model: { primary: OPENAI_DEFAULT_MODEL } } },

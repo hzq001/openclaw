@@ -31,6 +31,13 @@ export type AgentModelListConfig = {
   fallbacks?: string[];
 };
 
+export type AgentLocalModelsConfig = {
+  /** Local general-purpose model used for the gpt alias when configured. */
+  general?: string;
+  /** Local coding model used for local default coding flows when configured. */
+  coding?: string;
+};
+
 export type AgentContextPruningConfig = {
   mode?: "off" | "cache-ttl";
   /** TTL to consider cache expired (duration string, default unit: minutes). */
@@ -140,6 +147,8 @@ export type AgentDefaultsConfig = {
   pdfMaxPages?: number;
   /** Model catalog with optional aliases (full provider/model keys). */
   models?: Record<string, AgentModelEntryConfig>;
+  /** Local general/coding model overrides used by local defaults and aliases. */
+  localModels?: AgentLocalModelsConfig;
   /** Agent working directory (preferred). Used as the default cwd for agent runs. */
   workspace?: string;
   /** Optional repository root for system prompt runtime line (overrides auto-detect). */

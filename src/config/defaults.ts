@@ -5,6 +5,7 @@ import {
   parseModelRef,
 } from "../agents/model-selection.js";
 import { DEFAULT_AGENT_MAX_CONCURRENT, DEFAULT_SUBAGENT_MAX_CONCURRENT } from "./agent-limits.js";
+import { resolveLocalGeneralModelRef } from "./local-model-defaults.js";
 import { resolveAgentModelPrimaryValue } from "./model-input.js";
 import {
   DEFAULT_TALK_PROVIDER,
@@ -23,19 +24,25 @@ let defaultWarnState: WarnState = { warned: false };
 
 type AnthropicAuthDefaultsMode = "api_key" | "oauth";
 
-const DEFAULT_MODEL_ALIASES: Readonly<Record<string, string>> = {
+const STATIC_DEFAULT_MODEL_ALIASES: Readonly<Record<string, string>> = {
   // Anthropic (pi-ai catalog uses "latest" ids without date suffix)
   opus: "anthropic/claude-opus-4-6",
   sonnet: "anthropic/claude-sonnet-4-6",
 
   // OpenAI
-  gpt: "openai/gpt-5.2",
   "gpt-mini": "openai/gpt-5-mini",
 
   // Google Gemini (3.x are preview ids in the catalog)
   gemini: "google/gemini-3-pro-preview",
   "gemini-flash": "google/gemini-3-flash-preview",
 };
+
+function resolveDefaultModelAliases(cfg: OpenClawConfig): Readonly<Record<string, string>> {
+  return {
+    ...STATIC_DEFAULT_MODEL_ALIASES,
+    gpt: resolveLocalGeneralModelRef(cfg),
+  };
+}
 
 const DEFAULT_MODEL_COST: ModelDefinitionConfig["cost"] = {
   input: 0,
@@ -199,7 +206,7 @@ function resolveAnthropicDefaultAuthMode(cfg: OpenClawConfig): AnthropicAuthDefa
   return null;
 }
 
-function resolvePrimaryModelRef(raw?: string): string | null {
+function resolvePrimaryModelRef(cfg: OpenClawConfig, raw?: string): string | null {
   if (!raw || typeof raw !== "string") {
     return null;
   }
@@ -208,7 +215,7 @@ function resolvePrimaryModelRef(raw?: string): string | null {
     return null;
   }
   const aliasKey = trimmed.toLowerCase();
-  return DEFAULT_MODEL_ALIASES[aliasKey] ?? trimmed;
+  return resolveDefaultModelAliases(cfg)[aliasKey] ?? trimmed;
 }
 
 export type SessionDefaultsOptions = {
@@ -417,7 +424,7 @@ export function applyModelDefaults(cfg: OpenClawConfig): OpenClawConfig {
     ...normalizedAgentModels.models,
   };
 
-  for (const [alias, target] of Object.entries(DEFAULT_MODEL_ALIASES)) {
+  for (const [alias, target] of Object.entries(resolveDefaultModelAliases(cfg))) {
     const entry = nextModels[target];
     if (!entry) {
       continue;
@@ -564,6 +571,7 @@ export function applyContextPruningDefaults(cfg: OpenClawConfig): OpenClawConfig
     }
 
     const primary = resolvePrimaryModelRef(
+      cfg,
       resolveAgentModelPrimaryValue(defaults.model) ?? undefined,
     );
     if (primary) {
