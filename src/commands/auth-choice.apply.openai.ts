@@ -11,7 +11,7 @@ import { applyAuthProfileConfig, setOpenaiApiKey, writeOAuthCredentials } from "
 import { openUrl } from "./onboard-helpers.js";
 import {
   applyOpenAICodexModelDefault,
-  OPENAI_CODEX_DEFAULT_MODEL,
+  resolveOpenAICodexDefaultModel,
 } from "./openai-codex-model-default.js";
 import { loginOpenAICodexOAuth } from "./openai-codex-oauth.js";
 import {
@@ -102,18 +102,16 @@ export async function applyAuthChoiceOpenAI(
         provider: "openai-codex",
         mode: "oauth",
       });
+      const defaultModel = resolveOpenAICodexDefaultModel(nextConfig);
       if (params.setDefaultModel) {
         const applied = applyOpenAICodexModelDefault(nextConfig);
         nextConfig = applied.next;
         if (applied.changed) {
-          await params.prompter.note(
-            `Default model set to ${OPENAI_CODEX_DEFAULT_MODEL}`,
-            "Model configured",
-          );
+          await params.prompter.note(`Default model set to ${defaultModel}`, "Model configured");
         }
       } else {
-        agentModelOverride = OPENAI_CODEX_DEFAULT_MODEL;
-        await noteAgentModel(OPENAI_CODEX_DEFAULT_MODEL);
+        agentModelOverride = defaultModel;
+        await noteAgentModel(defaultModel);
       }
     }
     return { config: nextConfig, agentModelOverride };

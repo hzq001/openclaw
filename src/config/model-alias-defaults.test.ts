@@ -46,6 +46,25 @@ describe("applyModelDefaults", () => {
     expect(next.agents?.defaults?.models?.["openai/gpt-5.2"]?.alias).toBe("gpt");
   });
 
+  it("uses configured local general model for the gpt alias", () => {
+    const cfg = {
+      agents: {
+        defaults: {
+          localModels: {
+            general: "local/gpt-5.4",
+          },
+          models: {
+            "local/gpt-5.4": {},
+          },
+        },
+      },
+    } as OpenClawConfig;
+
+    const next = applyModelDefaults(cfg);
+
+    expect(next.agents?.defaults?.models?.["local/gpt-5.4"]?.alias).toBe("gpt");
+  });
+
   it("does not override existing aliases", () => {
     const cfg = {
       agents: {

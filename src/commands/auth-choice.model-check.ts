@@ -4,7 +4,7 @@ import { loadModelCatalog } from "../agents/model-catalog.js";
 import { resolveDefaultModelForAgent } from "../agents/model-selection.js";
 import type { OpenClawConfig } from "../config/config.js";
 import type { WizardPrompter } from "../wizard/prompts.js";
-import { OPENAI_CODEX_DEFAULT_MODEL } from "./openai-codex-model-default.js";
+import { resolveOpenAICodexDefaultModel } from "./openai-codex-model-default.js";
 
 export async function warnIfModelConfigLooksOff(
   config: OpenClawConfig,
@@ -45,7 +45,7 @@ export async function warnIfModelConfigLooksOff(
     const hasCodex = listProfilesForProvider(store, "openai-codex").length > 0;
     if (hasCodex) {
       warnings.push(
-        `Detected OpenAI Codex OAuth. Consider setting agents.defaults.model to ${OPENAI_CODEX_DEFAULT_MODEL}.`,
+        `Detected OpenAI Codex OAuth. Consider setting agents.defaults.model to ${resolveOpenAICodexDefaultModel(config)}.`,
       );
     }
   }

@@ -23,7 +23,7 @@ import { applyAuthProfileConfig, writeOAuthCredentials } from "../onboard-auth.j
 import { openUrl } from "../onboard-helpers.js";
 import {
   applyOpenAICodexModelDefault,
-  OPENAI_CODEX_DEFAULT_MODEL,
+  resolveOpenAICodexDefaultModel,
 } from "../openai-codex-model-default.js";
 import { loginOpenAICodexOAuth } from "../openai-codex-oauth.js";
 import {
@@ -299,6 +299,8 @@ async function runBuiltInOpenAICodexLogin(params: {
   const profileId = await writeOAuthCredentials("openai-codex", creds, params.agentDir, {
     syncSiblingAgents: true,
   });
+  const currentConfig = await loadValidConfigOrThrow();
+  const defaultModel = resolveOpenAICodexDefaultModel(currentConfig);
   await updateConfig((cfg) => {
     let next = applyAuthProfileConfig(cfg, {
       profileId,
@@ -314,11 +316,9 @@ async function runBuiltInOpenAICodexLogin(params: {
   logConfigUpdated(params.runtime);
   params.runtime.log(`Auth profile: ${profileId} (openai-codex/oauth)`);
   if (params.opts.setDefault) {
-    params.runtime.log(`Default model set to ${OPENAI_CODEX_DEFAULT_MODEL}`);
+    params.runtime.log(`Default model set to ${defaultModel}`);
   } else {
-    params.runtime.log(
-      `Default model available: ${OPENAI_CODEX_DEFAULT_MODEL} (use --set-default to apply)`,
-    );
+    params.runtime.log(`Default model available: ${defaultModel} (use --set-default to apply)`);
   }
 }
 
