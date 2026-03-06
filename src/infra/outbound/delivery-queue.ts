@@ -389,6 +389,7 @@ const PERMANENT_ERROR_PATTERNS: readonly RegExp[] = [
   /local media path is not under an allowed directory/i,
   /imessage automation denied/i,
   /grant automation access.*messages/i,
+  /ambiguous discord recipient/i,
 ];
 
 export function isPermanentDeliveryError(error: string): boolean {
