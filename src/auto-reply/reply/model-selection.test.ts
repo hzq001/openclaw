@@ -185,6 +185,7 @@ describe("createModelSelectionState parent inheritance", () => {
 
     expect(state.provider).toBe("openai");
     expect(state.model).toBe("gpt-4o");
+    expect(state.hasExplicitModelSelection).toBe(true);
   });
 
   it("skips stored override when heartbeat override was resolved", async () => {
@@ -192,6 +193,7 @@ describe("createModelSelectionState parent inheritance", () => {
 
     expect(state.provider).toBe("anthropic");
     expect(state.model).toBe("claude-opus-4-5");
+    expect(state.hasExplicitModelSelection).toBe(true);
   });
 });
 
@@ -228,6 +230,7 @@ describe("createModelSelectionState respects session model override", () => {
 
     expect(state.provider).toBe("kimi-coding");
     expect(state.model).toBe("k2p5");
+    expect(state.hasExplicitModelSelection).toBe(true);
   });
 
   it("falls back to default when no modelOverride is set", async () => {
@@ -235,6 +238,7 @@ describe("createModelSelectionState respects session model override", () => {
 
     expect(state.provider).toBe(defaultProvider);
     expect(state.model).toBe(defaultModel);
+    expect(state.hasExplicitModelSelection).toBe(false);
   });
 
   it("respects modelOverride even when session model field differs", async () => {
@@ -262,6 +266,23 @@ describe("createModelSelectionState respects session model override", () => {
 
     expect(state.provider).toBe(defaultProvider);
     expect(state.model).toBe("deepseek-v3-4bit-mlx");
+    expect(state.hasExplicitModelSelection).toBe(true);
+  });
+});
+
+describe("createModelSelectionState marks model directives as explicit selection", () => {
+  it("treats model directives as explicit even when selecting the default model", async () => {
+    const state = await createModelSelectionState({
+      cfg: {} as OpenClawConfig,
+      agentCfg: undefined,
+      defaultProvider: "openai",
+      defaultModel: "gpt-4o-mini",
+      provider: "openai",
+      model: "gpt-4o-mini",
+      hasModelDirective: true,
+    });
+
+    expect(state.hasExplicitModelSelection).toBe(true);
   });
 });
 

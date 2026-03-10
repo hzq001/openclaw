@@ -5,9 +5,25 @@ import { resetSubagentRegistryForTests } from "./subagent-registry.js";
 import { decodeStrictBase64, spawnSubagentDirect } from "./subagent-spawn.js";
 
 const callGatewayMock = vi.fn();
+const loadSessionEntryMock = vi.fn();
+const readRecentSessionMessagesMock = vi.fn();
 
 vi.mock("../gateway/call.js", () => ({
   callGateway: (opts: unknown) => callGatewayMock(opts),
+}));
+
+vi.mock("../gateway/session-utils.js", () => ({
+  loadSessionEntry: (sessionKey: string) => loadSessionEntryMock(sessionKey),
+}));
+
+vi.mock("../gateway/session-utils.fs.js", () => ({
+  readRecentSessionMessages: (
+    sessionId: string,
+    storePath: string | undefined,
+    sessionFile?: string,
+    maxMessages?: number,
+    readBytes?: number,
+  ) => readRecentSessionMessagesMock(sessionId, storePath, sessionFile, maxMessages, readBytes),
 }));
 
 let configOverride: Record<string, unknown> = {
@@ -88,6 +104,12 @@ function setupGatewayMock() {
   });
 }
 
+function findAgentMessage() {
+  return callGatewayMock.mock.calls.find(([opts]) => opts?.method === "agent")?.[0]?.params as
+    | { message?: string }
+    | undefined;
+}
+
 // --- decodeStrictBase64 ---
 
 describe("decodeStrictBase64", () => {
@@ -144,6 +166,16 @@ describe("spawnSubagentDirect filename validation", () => {
   beforeEach(() => {
     resetSubagentRegistryForTests();
     callGatewayMock.mockClear();
+    loadSessionEntryMock.mockReset();
+    readRecentSessionMessagesMock.mockReset();
+    loadSessionEntryMock.mockReturnValue({
+      storePath: "/tmp/sessions.json",
+      entry: {
+        sessionId: "requester-session",
+        sessionFile: "/tmp/requester-session.jsonl",
+      },
+    });
+    readRecentSessionMessagesMock.mockReturnValue([]);
     setupGatewayMock();
   });
 
@@ -209,5 +241,57 @@ describe("spawnSubagentDirect filename validation", () => {
     const result = await spawnWithName("");
     expect(result.status).toBe("error");
     expect(result.error).toMatch(/attachments_invalid_name/);
+  });
+
+  it("injects recent requester references when task omits concrete identifiers", async () => {
+    readRecentSessionMessagesMock.mockReturnValue([
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "请处理这个链接 https://x.com/kevinsxu/status/2029961571296743585 ，并读取文件 `kevinsxu_tweet_2029961571296743585.txt`。",
+          },
+        ],
+      },
+    ]);
+
+    const result = await spawnSubagentDirect(
+      {
+        task: "将推文内容导入到NotebookLM，并请求生成信息图和PPT",
+      },
+      ctx,
+    );
+
+    expect(result.status).toBe("accepted");
+    const params = findAgentMessage();
+    expect(params?.message).toContain("[Requester Context]");
+    expect(params?.message).toContain("https://x.com/kevinsxu/status/2029961571296743585");
+    expect(params?.message).toContain("kevinsxu_tweet_2029961571296743585.txt");
+  });
+
+  it("does not inject requester context when task already includes a concrete reference", async () => {
+    readRecentSessionMessagesMock.mockReturnValue([
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "请处理这个链接 https://x.com/kevinsxu/status/2029961571296743585",
+          },
+        ],
+      },
+    ]);
+
+    const result = await spawnSubagentDirect(
+      {
+        task: "处理这个链接 https://x.com/kevinsxu/status/2029961571296743585 并生成 PPT",
+      },
+      ctx,
+    );
+
+    expect(result.status).toBe("accepted");
+    const params = findAgentMessage();
+    expect(params?.message).not.toContain("[Requester Context]");
   });
 });

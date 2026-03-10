@@ -73,6 +73,8 @@ export type RunEmbeddedPiAgentParams = {
   disableTools?: boolean;
   provider?: string;
   model?: string;
+  /** True when the caller explicitly selected the provider/model for this run. */
+  hasExplicitModelSelection?: boolean;
   authProfileId?: string;
   authProfileIdSource?: "auto" | "user";
   thinkLevel?: ThinkLevel;

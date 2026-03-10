@@ -29,6 +29,7 @@ type ModelCatalog = Awaited<ReturnType<typeof loadModelCatalog>>;
 type ModelSelectionState = {
   provider: string;
   model: string;
+  hasExplicitModelSelection: boolean;
   allowedModelKeys: Set<string>;
   allowedModelCatalog: ModelCatalog;
   resetModelOverride: boolean;
@@ -353,6 +354,8 @@ export async function createModelSelectionState(params: {
   // was resolved. Heartbeat runs without heartbeat.model should still inherit
   // the regular session/parent model override behavior.
   const skipStoredOverride = params.hasResolvedHeartbeatModelOverride === true;
+  const hasExplicitModelSelection =
+    params.hasModelDirective || Boolean(storedOverride?.model) || skipStoredOverride;
   if (storedOverride?.model && !skipStoredOverride) {
     const candidateProvider = storedOverride.provider || defaultProvider;
     const key = modelKey(candidateProvider, storedOverride.model);
@@ -416,6 +419,7 @@ export async function createModelSelectionState(params: {
   return {
     provider,
     model,
+    hasExplicitModelSelection,
     allowedModelKeys,
     allowedModelCatalog,
     resetModelOverride,

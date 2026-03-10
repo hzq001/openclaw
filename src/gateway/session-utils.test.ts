@@ -166,6 +166,19 @@ describe("gateway session utils", () => {
     );
   });
 
+  test("resolveSessionStoreKey normalizes legacy webchat gateway subagent keys", () => {
+    const cfg = {
+      session: { mainKey: "main" },
+      agents: { list: [{ id: "ops", default: true }] },
+    } as OpenClawConfig;
+    expect(
+      resolveSessionStoreKey({
+        cfg,
+        sessionKey: "webchat:g-agent-main-subagent-93b6f9d6-4e27-4bc5-bea9-84eee3169fcb",
+      }),
+    ).toBe("agent:main:subagent:93b6f9d6-4e27-4bc5-bea9-84eee3169fcb");
+  });
+
   test("resolveSessionStoreKey honors global scope", () => {
     const cfg = {
       session: { scope: "global", mainKey: "work" },

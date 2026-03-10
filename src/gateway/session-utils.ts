@@ -24,6 +24,7 @@ import {
 } from "../config/sessions.js";
 import { openBoundaryFileSync } from "../infra/boundary-file-read.js";
 import {
+  normalizeComparableSessionKey,
   normalizeAgentId,
   normalizeMainKey,
   parseAgentSessionKey,
@@ -408,7 +409,7 @@ export function resolveSessionStoreKey(params: {
   cfg: OpenClawConfig;
   sessionKey: string;
 }): string {
-  const raw = (params.sessionKey ?? "").trim();
+  const raw = normalizeComparableSessionKey(params.sessionKey);
   if (!raw) {
     return raw;
   }

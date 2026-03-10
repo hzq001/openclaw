@@ -225,6 +225,18 @@ describe("buildAgentSystemPrompt", () => {
     );
   });
 
+  it("forbids re-transcribing inbound media with exec when OpenClaw already processed it", () => {
+    const prompt = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      toolNames: ["exec", "process", "message", "transcribe_audio"],
+    });
+
+    expect(prompt).toContain("Inbound media may already be preprocessed by OpenClaw.");
+    expect(prompt).toContain("Prefer provided Transcript/media status");
+    expect(prompt).toContain("Do not use exec to re-transcribe or re-download inbound attachments");
+    expect(prompt).toContain("use `transcribe_audio`");
+  });
+
   it("lists available tools when provided", () => {
     const prompt = buildAgentSystemPrompt({
       workspaceDir: "/tmp/openclaw",

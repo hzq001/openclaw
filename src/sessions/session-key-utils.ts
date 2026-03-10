@@ -5,6 +5,69 @@ export type ParsedAgentSessionKey = {
 
 export type SessionKeyChatType = "direct" | "group" | "channel" | "unknown";
 
+function normalizeGatewayArtifactSubagentRest(rest: string): string {
+  return rest.replaceAll("-subagent-", ":subagent:");
+}
+
+/**
+ * Normalize legacy gateway/UI session keys into the canonical agent-scoped form when possible.
+ * These artifacts look like "webchat:g-agent-main-subagent-..." or "g-agent-main-main".
+ */
+export function normalizeComparableSessionKey(sessionKey: string | undefined | null): string {
+  const raw = (sessionKey ?? "").trim().toLowerCase();
+  if (!raw) {
+    return "";
+  }
+  const parsed = parseAgentSessionKey(raw);
+  if (parsed) {
+    return `agent:${parsed.agentId}:${parsed.rest}`;
+  }
+
+  const withoutChannelPrefix = (() => {
+    const channelPrefixMatch = /^([a-z0-9_-]+):(g-agent-.+)$/.exec(raw);
+    return channelPrefixMatch?.[2] ?? raw;
+  })();
+  if (!withoutChannelPrefix.startsWith("g-agent-")) {
+    return raw;
+  }
+
+  const legacyPayload = withoutChannelPrefix.slice(2);
+  const agentPrefix = "agent-";
+  if (!legacyPayload.startsWith(agentPrefix)) {
+    return raw;
+  }
+
+  const remainder = legacyPayload.slice(agentPrefix.length);
+  const agentSeparator = remainder.indexOf("-");
+  if (agentSeparator <= 0) {
+    return raw;
+  }
+
+  const agentId = remainder.slice(0, agentSeparator).trim();
+  const rest = remainder.slice(agentSeparator + 1).trim();
+  if (!agentId || !rest) {
+    return raw;
+  }
+  if (rest === "main") {
+    return `agent:${agentId}:main`;
+  }
+  if (rest.startsWith("subagent-")) {
+    const subagentRest = rest.slice("subagent-".length).trim();
+    if (!subagentRest) {
+      return raw;
+    }
+    return `agent:${agentId}:subagent:${normalizeGatewayArtifactSubagentRest(subagentRest)}`;
+  }
+  return raw;
+}
+
+export function sessionKeysMatch(
+  left: string | undefined | null,
+  right: string | undefined | null,
+): boolean {
+  return normalizeComparableSessionKey(left) === normalizeComparableSessionKey(right);
+}
+
 /**
  * Parse agent-scoped session keys in a canonical, case-insensitive way.
  * Returned values are normalized to lowercase for stable comparisons/routing.

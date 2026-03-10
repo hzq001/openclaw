@@ -1,3 +1,4 @@
+import { normalizeComparableSessionKey } from "../../../src/routing/session-key.js";
 import { refreshChat } from "./app-chat.ts";
 import {
   startLogsPolling,
@@ -62,9 +63,13 @@ type SettingsHost = {
 };
 
 export function applySettings(host: SettingsHost, next: UiSettings) {
+  const sessionKey = normalizeComparableSessionKey(next.sessionKey) || "main";
+  const lastActiveSessionKey =
+    normalizeComparableSessionKey(next.lastActiveSessionKey) || sessionKey;
   const normalized = {
     ...next,
-    lastActiveSessionKey: next.lastActiveSessionKey?.trim() || next.sessionKey.trim() || "main",
+    sessionKey,
+    lastActiveSessionKey,
   };
   host.settings = normalized;
   saveSettings(normalized);
@@ -118,7 +123,7 @@ export function applySettingsFromUrl(host: SettingsHost) {
   }
 
   if (sessionRaw != null) {
-    const session = sessionRaw.trim();
+    const session = normalizeComparableSessionKey(sessionRaw);
     if (session) {
       host.sessionKey = session;
       applySettings(host, {
@@ -318,7 +323,7 @@ export function onPopState(host: SettingsHost) {
   }
 
   const url = new URL(window.location.href);
-  const session = url.searchParams.get("session")?.trim();
+  const session = normalizeComparableSessionKey(url.searchParams.get("session"));
   if (session) {
     host.sessionKey = session;
     applySettings(host, {

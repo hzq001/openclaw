@@ -6,6 +6,11 @@ import path from "node:path";
 //
 // Our package export map points subpath `types` at `dist/plugin-sdk/<entry>.d.ts`, so we
 // generate stable entry d.ts files that re-export the real declarations.
+//
+// Runtime JS subpath shims are also required because the package export map points
+// `openclaw/plugin-sdk/<entry>` at `dist/plugin-sdk/<entry>.js`. tsdown currently emits a
+// single `dist/plugin-sdk/index.js`, so we synthesize missing subpath files that re-export
+// from the root runtime entry.
 const entrypoints = [
   "index",
   "core",
@@ -53,8 +58,17 @@ const entrypoints = [
   "keyed-async-queue",
 ] as const;
 for (const entry of entrypoints) {
-  const out = path.join(process.cwd(), `dist/plugin-sdk/${entry}.d.ts`);
-  fs.mkdirSync(path.dirname(out), { recursive: true });
+  const dtsOut = path.join(process.cwd(), `dist/plugin-sdk/${entry}.d.ts`);
+  fs.mkdirSync(path.dirname(dtsOut), { recursive: true });
   // NodeNext: reference the runtime specifier with `.js`, TS will map it to `.d.ts`.
-  fs.writeFileSync(out, `export * from "./plugin-sdk/${entry}.js";\n`, "utf8");
+  fs.writeFileSync(dtsOut, `export * from "./plugin-sdk/${entry}.js";\n`, "utf8");
+
+  if (entry === "index") {
+    continue;
+  }
+
+  const jsOut = path.join(process.cwd(), `dist/plugin-sdk/${entry}.js`);
+  if (!fs.existsSync(jsOut)) {
+    fs.writeFileSync(jsOut, `export * from "./index.js";\n`, "utf8");
+  }
 }

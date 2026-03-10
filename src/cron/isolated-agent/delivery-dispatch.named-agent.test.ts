@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { matchesMessagingToolDeliveryTarget } from "./delivery-dispatch.js";
+import {
+  matchesMessagingToolDeliveryTarget,
+  shouldUseDirectCronDelivery,
+} from "./delivery-dispatch.js";
 
 // Mock the announce flow dependencies to test the fallback behavior.
 vi.mock("../../agents/subagent-announce.js", () => ({
@@ -95,5 +98,25 @@ describe("resolveCronDeliveryBestEffort", () => {
       payload: { kind: "agentTurn", bestEffortDeliver: true },
     } as never;
     expect(resolveCronDeliveryBestEffort(job)).toBe(true);
+  });
+});
+
+describe("shouldUseDirectCronDelivery", () => {
+  it("uses direct delivery for plain text cron output", () => {
+    expect(
+      shouldUseDirectCronDelivery({
+        deliveryPayloadHasStructuredContent: false,
+        threadId: undefined,
+      }),
+    ).toBe(true);
+  });
+
+  it("uses direct delivery for thread targets", () => {
+    expect(
+      shouldUseDirectCronDelivery({
+        deliveryPayloadHasStructuredContent: false,
+        threadId: "42",
+      }),
+    ).toBe(true);
   });
 });

@@ -36,6 +36,25 @@ describe("handleChatEvent", () => {
     expect(handleChatEvent(state, payload)).toBe(null);
   });
 
+  it("accepts canonical events when the UI session key is a legacy webchat gateway key", () => {
+    const state = createState({
+      sessionKey: "webchat:g-agent-main-subagent-93b6f9d6-4e27-4bc5-bea9-84eee3169fcb",
+      chatRunId: "run-1",
+    });
+    const payload: ChatEventPayload = {
+      runId: "run-1",
+      sessionKey: "agent:main:subagent:93b6f9d6-4e27-4bc5-bea9-84eee3169fcb",
+      state: "final",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "done" }],
+      },
+    };
+
+    expect(handleChatEvent(state, payload)).toBe("final");
+    expect(state.chatMessages).toEqual([payload.message]);
+  });
+
   it("returns null for delta from another run", () => {
     const state = createState({
       sessionKey: "main",
@@ -564,5 +583,24 @@ describe("loadChatHistory", () => {
     expect(state.chatThinkingLevel).toBe("low");
     expect(state.chatLoading).toBe(false);
     expect(state.lastError).toBeNull();
+  });
+
+  it("normalizes legacy webchat gateway session keys before requesting history", async () => {
+    const request = vi.fn().mockResolvedValue({
+      messages: [],
+      thinkingLevel: "low",
+    });
+    const state = createState({
+      connected: true,
+      sessionKey: "webchat:g-agent-main-subagent-93b6f9d6-4e27-4bc5-bea9-84eee3169fcb",
+      client: { request } as unknown as ChatState["client"],
+    });
+
+    await loadChatHistory(state);
+
+    expect(request).toHaveBeenCalledWith("chat.history", {
+      sessionKey: "agent:main:subagent:93b6f9d6-4e27-4bc5-bea9-84eee3169fcb",
+      limit: 200,
+    });
   });
 });

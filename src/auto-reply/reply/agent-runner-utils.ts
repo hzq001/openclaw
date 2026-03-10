@@ -178,6 +178,7 @@ export function buildEmbeddedRunBaseParams(params: {
     enforceFinalTag: resolveEnforceFinalTag(params.run, params.provider),
     provider: params.provider,
     model: params.model,
+    hasExplicitModelSelection: params.run.hasExplicitModelSelection,
     ...params.authProfile,
     thinkLevel: params.run.thinkLevel,
     verboseLevel: params.run.verboseLevel,

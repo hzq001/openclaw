@@ -42,6 +42,8 @@ const GROQ_TOO_MANY_REQUESTS_MESSAGE =
   "429 Too Many Requests: Too many requests were sent in a given timeframe.";
 const GROQ_SERVICE_UNAVAILABLE_MESSAGE =
   "503 Service Unavailable: The server is temporarily unable to handle the request due to overloading or maintenance.";
+const QWEN_PROXY_BAD_REQUEST_MESSAGE =
+  "500 Request failed: Qwen3-235B-A22B model request failed, status: 400 Bad Request";
 
 describe("isAuthPermanentErrorMessage", () => {
   it("matches permanent auth failure patterns", () => {
@@ -552,6 +554,7 @@ describe("classifyFailoverReason", () => {
     ).toBe("timeout");
     expect(classifyFailoverReason("string should match pattern")).toBe("format");
     expect(classifyFailoverReason("bad request")).toBeNull();
+    expect(classifyFailoverReason(QWEN_PROXY_BAD_REQUEST_MESSAGE)).toBe("format");
     expect(
       classifyFailoverReason(
         "messages.84.content.1.image.source.base64.data: At least one of the image dimensions exceed max allowed size for many-image requests: 2000 pixels",

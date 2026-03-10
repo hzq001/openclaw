@@ -61,4 +61,23 @@ describe("sanitizeToolsForGoogle", () => {
     expect(sanitized).toEqual([tool]);
     expect(sanitized[0]).toBe(tool);
   });
+
+  it("strips unsupported schema keywords for Gemini model IDs even on non-google providers", () => {
+    const tool = createTool({
+      type: "object",
+      patternProperties: { "^x-": { type: "string" } },
+      properties: {
+        foo: {
+          type: "string",
+          format: "uuid",
+        },
+      },
+    });
+    const [sanitized] = sanitizeToolsForGoogle({
+      tools: [tool],
+      provider: "x666",
+      modelId: "gemini-3-flash-preview",
+    });
+    expectFormatRemoved(sanitized, "patternProperties");
+  });
 });

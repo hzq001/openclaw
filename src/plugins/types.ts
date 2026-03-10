@@ -399,6 +399,12 @@ export type PluginHookAgentContext = {
 export type PluginHookBeforeModelResolveEvent = {
   /** User prompt for this run. No session messages are available yet in this phase. */
   prompt: string;
+  /** Provider selected before hook overrides are applied. */
+  requestedProvider?: string;
+  /** Model selected before hook overrides are applied. */
+  requestedModel?: string;
+  /** True when the caller explicitly selected a provider/model for this run. */
+  hasExplicitModelSelection?: boolean;
 };
 
 export type PluginHookBeforeModelResolveResult = {

@@ -15,7 +15,7 @@ import { emitAgentEvent, onAgentEvent } from "../infra/agent-events.js";
 import { setActivePluginRegistry } from "../plugins/runtime.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { createOutboundTestPlugin, createTestRegistry } from "../test-utils/channel-plugins.js";
-import { agentCommand, agentCommandFromIngress } from "./agent.js";
+import { agentCommand, agentCommandFromIngress, resolveFallbackRetryPrompt } from "./agent.js";
 import * as agentDeliveryModule from "./agent/delivery.js";
 
 vi.mock("../agents/auth-profiles.js", async (importOriginal) => {
@@ -260,6 +260,20 @@ beforeEach(() => {
   vi.mocked(runEmbeddedPiAgent).mockResolvedValue(createDefaultAgentResult());
   vi.mocked(loadModelCatalog).mockResolvedValue([]);
   vi.mocked(modelSelectionModule.isCliProvider).mockImplementation(() => false);
+});
+
+describe("resolveFallbackRetryPrompt", () => {
+  it("returns original body when not in fallback retry", () => {
+    const body = "run weather task";
+    expect(resolveFallbackRetryPrompt({ body, isFallbackRetry: false })).toBe(body);
+  });
+
+  it("keeps original task text in fallback retry prompt", () => {
+    const body = "执行命令并把 stdout 原样作为最终回复";
+    const resolved = resolveFallbackRetryPrompt({ body, isFallbackRetry: true });
+    expect(resolved).toContain("Continue where you left off");
+    expect(resolved).toContain(body);
+  });
 });
 
 describe("agentCommand", () => {

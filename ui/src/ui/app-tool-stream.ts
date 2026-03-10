@@ -1,3 +1,4 @@
+import { sessionKeysMatch } from "../../../src/routing/session-key.js";
 import { truncateText } from "./format.ts";
 
 const TOOL_STREAM_LIMIT = 50;
@@ -301,7 +302,7 @@ function resolveAcceptedSession(
   },
 ): { accepted: boolean; sessionKey?: string } {
   const sessionKey = typeof payload.sessionKey === "string" ? payload.sessionKey : undefined;
-  if (sessionKey && sessionKey !== host.sessionKey) {
+  if (sessionKey && !sessionKeysMatch(sessionKey, host.sessionKey)) {
     return { accepted: false };
   }
   if (!host.chatRunId && options?.allowSessionScopedWhenIdle && sessionKey) {

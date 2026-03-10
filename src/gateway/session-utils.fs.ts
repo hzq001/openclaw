@@ -708,6 +708,22 @@ function readRecentMessagesFromTranscript(
   }
 }
 
+export function readRecentSessionMessages(
+  sessionId: string,
+  storePath: string | undefined,
+  sessionFile: string | undefined,
+  maxMessages: number,
+  readBytes: number,
+  agentId?: string,
+): TranscriptPreviewMessage[] {
+  const candidates = resolveSessionTranscriptCandidates(sessionId, storePath, sessionFile, agentId);
+  const filePath = candidates.find((p) => fs.existsSync(p));
+  if (!filePath) {
+    return [];
+  }
+  return readRecentMessagesFromTranscript(filePath, maxMessages, readBytes);
+}
+
 export function readSessionPreviewItemsFromTranscript(
   sessionId: string,
   storePath: string | undefined,

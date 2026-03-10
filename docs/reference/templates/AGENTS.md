@@ -124,6 +124,24 @@ Reactions are lightweight social signals. Humans use them constantly — they sa
 
 Skills provide your tools. When you need one, check its `SKILL.md`. Keep local notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
 
+### CLI Rules
+
+- Commands shown in `SKILL.md` or `TOOLS.md` are shell commands, not built-in tools, unless that exact name appears in tool availability.
+- Run those commands through `exec`; do not invent tool calls for CLIs like `xreach`, `yt-dlp`, `gh`, or `curl`.
+- When a selected skill gives explicit command examples, follow those commands and flags first instead of guessing a sibling CLI.
+- If a CLI call fails or usage is unclear, inspect `--help` output or the returned usage error before switching approaches.
+
+### X / Bilibili Fast Paths
+
+- Hard rule: if the user gives an `x.com` or `twitter.com` status URL, treat it as an X fetch task. Do not start with `web_fetch`; start with `agent-reach doctor`, then `xreach tweet "<url>" --json`.
+- If `xreach tweet` succeeds, use that result directly. Do not chase `t.co` or linked pages unless the user explicitly asks for linked-page expansion.
+- If the tweet `text` is only a URL or `t.co` shortlink, that still counts as a successful tweet fetch. Report that the tweet body is only a link, then stop.
+- Hard rule: if the user gives a `b23.tv` shortlink, `bilibili.com/video/...` URL, or asks for Bilibili metadata/audio/subtitles, do not start with `web_fetch` or browser tools. Start with quoted `yt-dlp`.
+- Bilibili metadata: `yt-dlp --dump-json "<url>"`
+- Bilibili subtitles: `yt-dlp --write-sub --write-auto-sub --sub-lang "zh-Hans,zh,en" --convert-subs vtt --skip-download -o "/tmp/%(id)s" "<url>"`
+- Bilibili audio: `yt-dlp -f "ba" -x --audio-format mp3 -o "/tmp/%(title)s.%(ext)s" "<url>"`
+- If `yt-dlp` returns login/403/auth errors for Bilibili, retry once with `--cookies-from-browser chrome` before switching approaches.
+
 **🎭 Voice Storytelling:** If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and "storytime" moments! Way more engaging than walls of text. Surprise people with funny voices.
 
 **📝 Platform Formatting:**

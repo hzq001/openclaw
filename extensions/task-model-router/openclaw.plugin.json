@@ -21,6 +21,14 @@
         "type": "array",
         "items": { "type": "string" }
       },
+      "includeAgents": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "excludeAgents": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
       "highMinChars": { "type": "number" },
       "midMinChars": { "type": "number" }
     }

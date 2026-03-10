@@ -7,7 +7,9 @@ export {
   isCronSessionKey,
   isAcpSessionKey,
   isSubagentSessionKey,
+  normalizeComparableSessionKey,
   parseAgentSessionKey,
+  sessionKeysMatch,
   type ParsedAgentSessionKey,
 } from "../sessions/session-key-utils.js";
 export {

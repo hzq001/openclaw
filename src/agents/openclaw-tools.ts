@@ -20,6 +20,7 @@ import { createSessionsListTool } from "./tools/sessions-list-tool.js";
 import { createSessionsSendTool } from "./tools/sessions-send-tool.js";
 import { createSessionsSpawnTool } from "./tools/sessions-spawn-tool.js";
 import { createSubagentsTool } from "./tools/subagents-tool.js";
+import { createTranscribeAudioTool } from "./tools/transcribe-audio-tool.js";
 import { createTtsTool } from "./tools/tts-tool.js";
 import { createWebFetchTool, createWebSearchTool } from "./tools/web-tools.js";
 import { resolveWorkspaceRoot } from "./workspace-dir.js";
@@ -101,6 +102,16 @@ export function createOpenClawTools(options?: {
         fsPolicy: options?.fsPolicy,
       })
     : null;
+  const transcribeAudioTool = createTranscribeAudioTool({
+    config: options?.config,
+    agentDir: options?.agentDir,
+    workspaceDir,
+    sandbox:
+      options?.sandboxRoot && options?.sandboxFsBridge
+        ? { root: options.sandboxRoot, bridge: options.sandboxFsBridge }
+        : undefined,
+    fsPolicy: options?.fsPolicy,
+  });
   const webSearchTool = createWebSearchTool({
     config: options?.config,
     sandboxed: options?.sandboxed,
@@ -151,6 +162,7 @@ export function createOpenClawTools(options?: {
       agentChannel: options?.agentChannel,
       config: options?.config,
     }),
+    transcribeAudioTool,
     createGatewayTool({
       agentSessionKey: options?.agentSessionKey,
       config: options?.config,

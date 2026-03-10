@@ -318,7 +318,12 @@ export async function runEmbeddedPiAgent(
       if (hookRunner?.hasHooks("before_model_resolve")) {
         try {
           modelResolveOverride = await hookRunner.runBeforeModelResolve(
-            { prompt: params.prompt },
+            {
+              prompt: params.prompt,
+              requestedProvider: provider,
+              requestedModel: modelId,
+              hasExplicitModelSelection: params.hasExplicitModelSelection === true,
+            },
             hookCtx,
           );
         } catch (hookErr) {

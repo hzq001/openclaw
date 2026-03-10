@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import * as compatSdk from "openclaw/plugin-sdk/compat";
 import * as discordSdk from "openclaw/plugin-sdk/discord";
 import * as imessageSdk from "openclaw/plugin-sdk/imessage";
@@ -5,6 +6,7 @@ import * as lineSdk from "openclaw/plugin-sdk/line";
 import * as msteamsSdk from "openclaw/plugin-sdk/msteams";
 import * as signalSdk from "openclaw/plugin-sdk/signal";
 import * as slackSdk from "openclaw/plugin-sdk/slack";
+import * as telegramSdk from "openclaw/plugin-sdk/telegram";
 import * as whatsappSdk from "openclaw/plugin-sdk/whatsapp";
 import { describe, expect, it } from "vitest";
 
@@ -64,6 +66,11 @@ describe("plugin-sdk subpath exports", () => {
     expect(typeof slackSdk.handleSlackMessageAction).toBe("function");
   });
 
+  it("exports Telegram helpers", () => {
+    expect(typeof telegramSdk.resolveTelegramAccount).toBe("function");
+    expect(typeof telegramSdk.telegramOnboardingAdapter).toBe("object");
+  });
+
   it("exports Signal helpers", () => {
     expect(typeof signalSdk.resolveSignalAccount).toBe("function");
     expect(typeof signalSdk.signalOnboardingAdapter).toBe("object");
@@ -95,5 +102,22 @@ describe("plugin-sdk subpath exports", () => {
       expect(typeof mod).toBe("object");
       expect(mod, `subpath ${id} should resolve`).toBeTruthy();
     }
+  });
+
+  it("resolves Telegram runtime subpath via package exports", () => {
+    const stdout = execFileSync(
+      "node",
+      [
+        "--input-type=module",
+        "-e",
+        "import('openclaw/plugin-sdk/telegram').then(() => process.stdout.write('ok'))",
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      },
+    );
+
+    expect(stdout).toBe("ok");
   });
 });

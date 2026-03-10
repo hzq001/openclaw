@@ -33,6 +33,8 @@ const GROQ_TOO_MANY_REQUESTS_MESSAGE =
   "429 Too Many Requests: Too many requests were sent in a given timeframe.";
 const GROQ_SERVICE_UNAVAILABLE_MESSAGE =
   "503 Service Unavailable: The server is temporarily unable to handle the request due to overloading or maintenance.";
+const QWEN_PROXY_BAD_REQUEST_MESSAGE =
+  "500 Request failed: Qwen3-235B-A22B model request failed, status: 400 Bad Request";
 
 describe("failover-error", () => {
   it("infers failover reason from HTTP status", () => {
@@ -182,6 +184,17 @@ describe("failover-error", () => {
     });
     expect(err?.reason).toBe("format");
     expect(err?.status).toBe(400);
+  });
+
+  it("coerces qwen proxy 400 bad request errors into format failover", () => {
+    const err = coerceToFailoverError(QWEN_PROXY_BAD_REQUEST_MESSAGE, {
+      provider: "unicom-cloud",
+      model: "Qwen3-235B-A22B",
+    });
+    expect(err?.reason).toBe("format");
+    expect(err?.status).toBe(400);
+    expect(err?.provider).toBe("unicom-cloud");
+    expect(err?.model).toBe("Qwen3-235B-A22B");
   });
 
   it("401/403 with generic message still returns auth (backward compat)", () => {

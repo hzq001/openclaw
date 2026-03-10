@@ -167,6 +167,7 @@ export async function runCronIsolatedAgentTurn(params: {
   });
   let provider = resolvedDefault.provider;
   let model = resolvedDefault.model;
+  let hasExplicitModelSelection = false;
 
   let catalog: Awaited<ReturnType<typeof loadModelCatalog>> | undefined;
   const loadCatalog = async () => {
@@ -232,6 +233,7 @@ export async function runCronIsolatedAgentTurn(params: {
     } else {
       provider = resolvedOverride.ref.provider;
       model = resolvedOverride.ref.model;
+      hasExplicitModelSelection = true;
     }
   }
   const now = Date.now();
@@ -295,6 +297,7 @@ export async function runCronIsolatedAgentTurn(params: {
       if (!("error" in resolvedSessionOverride)) {
         provider = resolvedSessionOverride.ref.provider;
         model = resolvedSessionOverride.ref.model;
+        hasExplicitModelSelection = true;
       }
     }
   }
@@ -515,6 +518,7 @@ export async function runCronIsolatedAgentTurn(params: {
             lane: params.lane ?? "cron",
             provider: providerOverride,
             model: modelOverride,
+            hasExplicitModelSelection,
             authProfileId,
             authProfileIdSource,
             thinkLevel,

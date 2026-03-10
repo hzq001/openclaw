@@ -763,6 +763,22 @@ export function isCloudCodeAssistFormatError(raw: string): boolean {
   return !isImageDimensionErrorMessage(raw) && matchesFormatErrorPattern(raw);
 }
 
+function isQwenProxyBadRequestFormatError(raw: string): boolean {
+  if (!raw) {
+    return false;
+  }
+  const lower = raw.toLowerCase();
+  // Unicom's Qwen gateway currently wraps some model-side 400s in a generic
+  // "500 Request failed ... status: 400 Bad Request" shell. We only relax this
+  // exact shape so normal 5xx/network errors keep their existing timeout path.
+  return (
+    lower.includes("request failed:") &&
+    lower.includes("qwen") &&
+    lower.includes("model request failed") &&
+    lower.includes("status: 400 bad request")
+  );
+}
+
 export function isAuthAssistantError(msg: AssistantMessage | undefined): boolean {
   if (!msg || msg.stopReason !== "error") {
     return false;
@@ -834,6 +850,9 @@ export function classifyFailoverReason(raw: string): FailoverReason | null {
   }
   if (isModelNotFoundErrorMessage(raw)) {
     return "model_not_found";
+  }
+  if (isQwenProxyBadRequestFormatError(raw)) {
+    return "format";
   }
   if (isTransientHttpError(raw)) {
     // Treat transient 5xx provider failures as retryable transport issues.

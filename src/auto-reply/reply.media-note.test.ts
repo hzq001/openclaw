@@ -1,9 +1,9 @@
 import path from "node:path";
 import "./reply.directive.directive-behavior.e2e-mocks.js";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { withTempHome as withTempHomeBase } from "../../test/helpers/temp-home.js";
-import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
 import type { OpenClawConfig } from "../config/config.js";
+import { runEmbeddedPiAgentMock } from "./reply.directive.directive-behavior.e2e-mocks.js";
 import { getReplyFromConfig } from "./reply.js";
 
 function makeResult(text: string) {
@@ -19,7 +19,7 @@ function makeResult(text: string) {
 async function withTempHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
   return withTempHomeBase(
     async (home) => {
-      vi.mocked(runEmbeddedPiAgent).mockClear();
+      runEmbeddedPiAgentMock.mockClear();
       return await fn(home);
     },
     {
@@ -48,7 +48,7 @@ describe("getReplyFromConfig media note plumbing", () => {
   it("includes all MediaPaths in the agent prompt", async () => {
     await withTempHome(async (home) => {
       let seenPrompt: string | undefined;
-      vi.mocked(runEmbeddedPiAgent).mockImplementation(async (params) => {
+      runEmbeddedPiAgentMock.mockImplementation(async (params) => {
         seenPrompt = params.prompt;
         return makeResult("ok");
       });
@@ -77,6 +77,54 @@ describe("getReplyFromConfig media note plumbing", () => {
       expect((idxA ?? -1) >= 0).toBe(true);
       expect((idxB ?? -1) >= 0).toBe(true);
       expect((idxA ?? 0) < (idxB ?? 0)).toBe(true);
+    });
+  });
+
+  it("shows skipped audio status without exposing the raw audio path", async () => {
+    await withTempHome(async (home) => {
+      let seenPrompt: string | undefined;
+      runEmbeddedPiAgentMock.mockImplementation(async (params) => {
+        seenPrompt = params.prompt;
+        return makeResult("ok");
+      });
+
+      const cfg = makeCfg(home);
+      const res = await getReplyFromConfig(
+        {
+          Body: "帮我总结这个音频",
+          From: "+1001",
+          To: "+2000",
+          MediaPaths: ["/tmp/voice.ogg", "/tmp/image.png"],
+          MediaUrls: ["https://example.com/voice.ogg", "https://example.com/image.png"],
+          MediaTypes: ["audio/ogg", "image/png"],
+          MediaUnderstandingDecisions: [
+            {
+              capability: "audio",
+              outcome: "skipped",
+              attachments: [
+                {
+                  attachmentIndex: 0,
+                  attempts: [
+                    {
+                      type: "cli",
+                      outcome: "skipped",
+                      reason: "maxBytes: too large",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {},
+        cfg,
+      );
+
+      const text = Array.isArray(res) ? res[0]?.text : res?.text;
+      expect(text).toBe("ok");
+      expect(seenPrompt).toContain("[audio status: transcription unavailable (maxBytes)]");
+      expect(seenPrompt).toContain("[media attached: /tmp/image.png");
+      expect(seenPrompt).not.toContain("/tmp/voice.ogg");
     });
   });
 });

@@ -2,8 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import register from "./index.js";
 
 type HookHandler = (
-  event: { prompt: string },
-  ctx: { sessionKey?: string },
+  event: {
+    prompt: string;
+    requestedProvider?: string;
+    requestedModel?: string;
+    hasExplicitModelSelection?: boolean;
+  },
+  ctx: { sessionKey?: string; agentId?: string },
 ) =>
   | Promise<{ providerOverride?: string; modelOverride?: string } | undefined>
   | { providerOverride?: string; modelOverride?: string }
@@ -98,6 +103,23 @@ describe("task-model-router", () => {
     });
   });
 
+  it("显式指定模型时不覆盖请求模型", async () => {
+    const { api, hooks } = createApi();
+    register(api as never);
+
+    const result = await hooks.before_model_resolve(
+      {
+        prompt: "请帮我总结今天的交易笔记",
+        requestedProvider: "local",
+        requestedModel: "gpt-5.4",
+        hasExplicitModelSelection: true,
+      },
+      { sessionKey: "agent:main:main" },
+    );
+
+    expect(result).toBeUndefined();
+  });
+
   it("超长文本即使无关键词也命中 high 模型", async () => {
     const { api, hooks } = createApi();
     register(api as never);
@@ -126,5 +148,46 @@ describe("task-model-router", () => {
 
     expect(result).toBeUndefined();
     expect(api.logger.warn).toHaveBeenCalled();
+  });
+
+  it("excludeAgents 命中时跳过当前 agent", async () => {
+    const { api, hooks } = createApi({
+      pluginConfig: {
+        excludeAgents: ["aitrade"],
+      },
+    });
+    register(api as never);
+
+    const result = await hooks.before_model_resolve(
+      { prompt: "请总结今天的交易笔记" },
+      { sessionKey: "agent:aitrade:main", agentId: "aitrade" },
+    );
+
+    expect(result).toBeUndefined();
+  });
+
+  it("includeAgents 仅对命中的 agent 生效", async () => {
+    const { api, hooks } = createApi({
+      pluginConfig: {
+        includeAgents: ["main"],
+        lowModel: "local/gpt-5.4",
+      },
+    });
+    register(api as never);
+
+    const skipped = await hooks.before_model_resolve(
+      { prompt: "你好" },
+      { sessionKey: "agent:aitrade:main", agentId: "aitrade" },
+    );
+    const applied = await hooks.before_model_resolve(
+      { prompt: "你好" },
+      { sessionKey: "agent:main:main", agentId: "main" },
+    );
+
+    expect(skipped).toBeUndefined();
+    expect(applied).toEqual({
+      providerOverride: "local",
+      modelOverride: "gpt-5.4",
+    });
   });
 });

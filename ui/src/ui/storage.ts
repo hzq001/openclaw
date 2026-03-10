@@ -1,5 +1,6 @@
 const KEY = "openclaw.control.settings.v1";
 
+import { normalizeComparableSessionKey } from "../../../src/routing/session-key.js";
 import { isSupportedLocale } from "../i18n/index.ts";
 import { inferBasePathFromPathname, normalizeBasePath } from "./navigation.ts";
 import type { ThemeMode } from "./theme.ts";
@@ -50,21 +51,18 @@ export function loadSettings(): UiSettings {
       return defaults;
     }
     const parsed = JSON.parse(raw) as Partial<UiSettings>;
+    const sessionKey = normalizeComparableSessionKey(parsed.sessionKey);
+    const lastActiveSessionKey = normalizeComparableSessionKey(
+      parsed.lastActiveSessionKey ?? parsed.sessionKey,
+    );
     return {
       gatewayUrl:
         typeof parsed.gatewayUrl === "string" && parsed.gatewayUrl.trim()
           ? parsed.gatewayUrl.trim()
           : defaults.gatewayUrl,
       token: typeof parsed.token === "string" ? parsed.token : defaults.token,
-      sessionKey:
-        typeof parsed.sessionKey === "string" && parsed.sessionKey.trim()
-          ? parsed.sessionKey.trim()
-          : defaults.sessionKey,
-      lastActiveSessionKey:
-        typeof parsed.lastActiveSessionKey === "string" && parsed.lastActiveSessionKey.trim()
-          ? parsed.lastActiveSessionKey.trim()
-          : (typeof parsed.sessionKey === "string" && parsed.sessionKey.trim()) ||
-            defaults.lastActiveSessionKey,
+      sessionKey: sessionKey || defaults.sessionKey,
+      lastActiveSessionKey: lastActiveSessionKey || defaults.lastActiveSessionKey,
       theme:
         parsed.theme === "light" || parsed.theme === "dark" || parsed.theme === "system"
           ? parsed.theme

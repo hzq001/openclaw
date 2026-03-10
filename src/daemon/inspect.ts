@@ -25,11 +25,30 @@ export type FindExtraGatewayServicesOptions = {
 const EXTRA_MARKERS = ["openclaw", "clawdbot", "moltbot"] as const;
 
 export function renderGatewayServiceCleanupHints(
+  extraServices: ExtraGatewayService[] = [],
   env: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
 ): string[] {
   const profile = env.OPENCLAW_PROFILE;
   switch (process.platform) {
     case "darwin": {
+      const darwinHints = extraServices
+        .filter((service) => service.platform === "darwin")
+        .flatMap((service) => {
+          const plistPath = service.detail.startsWith("plist: ")
+            ? service.detail.slice("plist: ".length)
+            : null;
+          const rmTarget =
+            plistPath && plistPath.startsWith(`${env.HOME ?? ""}/`)
+              ? `~/${plistPath.slice((env.HOME ?? "").length + 1)}`
+              : plistPath;
+          return [
+            `launchctl bootout gui/$UID/${service.label}`,
+            ...(rmTarget ? [`rm ${rmTarget}`] : []),
+          ];
+        });
+      if (darwinHints.length > 0) {
+        return [...new Set(darwinHints)];
+      }
       const label = resolveGatewayLaunchAgentLabel(profile);
       return [`launchctl bootout gui/$UID/${label}`, `rm ~/Library/LaunchAgents/${label}.plist`];
     }

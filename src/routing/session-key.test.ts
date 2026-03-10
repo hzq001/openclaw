@@ -3,11 +3,13 @@ import {
   deriveSessionChatType,
   getSubagentDepth,
   isCronSessionKey,
+  normalizeComparableSessionKey,
 } from "../sessions/session-key-utils.js";
 import {
   classifySessionKeyShape,
   isValidAgentId,
   parseAgentSessionKey,
+  sessionKeysMatch,
   toAgentStoreSessionKey,
 } from "./session-key.js";
 
@@ -114,6 +116,23 @@ describe("session key canonicalization", () => {
         requestKey: "agent:main:main",
       }),
     ).toBe("agent:main:main");
+  });
+
+  it("normalizes legacy gateway artifact subagent keys", () => {
+    expect(
+      normalizeComparableSessionKey(
+        "webchat:g-agent-main-subagent-93b6f9d6-4e27-4bc5-bea9-84eee3169fcb",
+      ),
+    ).toBe("agent:main:subagent:93b6f9d6-4e27-4bc5-bea9-84eee3169fcb");
+  });
+
+  it("matches canonical keys against legacy gateway artifacts", () => {
+    expect(
+      sessionKeysMatch(
+        "webchat:g-agent-main-subagent-93b6f9d6-4e27-4bc5-bea9-84eee3169fcb",
+        "agent:main:subagent:93b6f9d6-4e27-4bc5-bea9-84eee3169fcb",
+      ),
+    ).toBe(true);
   });
 });
 

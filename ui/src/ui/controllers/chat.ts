@@ -1,3 +1,7 @@
+import {
+  normalizeComparableSessionKey,
+  sessionKeysMatch,
+} from "../../../../src/routing/session-key.js";
 import { extractText } from "../chat/message-extract.ts";
 import type { GatewayBrowserClient } from "../gateway.ts";
 import type { ChatAttachment } from "../ui-types.ts";
@@ -57,10 +61,11 @@ export async function loadChatHistory(state: ChatState) {
   state.chatLoading = true;
   state.lastError = null;
   try {
+    const sessionKey = normalizeComparableSessionKey(state.sessionKey);
     const res = await state.client.request<{ messages?: Array<unknown>; thinkingLevel?: string }>(
       "chat.history",
       {
-        sessionKey: state.sessionKey,
+        sessionKey,
         limit: 200,
       },
     );
@@ -245,7 +250,7 @@ export function handleChatEvent(state: ChatState, payload?: ChatEventPayload) {
   if (!payload) {
     return null;
   }
-  if (payload.sessionKey !== state.sessionKey) {
+  if (!sessionKeysMatch(payload.sessionKey, state.sessionKey)) {
     return null;
   }
 

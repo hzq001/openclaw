@@ -506,6 +506,7 @@ export async function runPreparedReply(
       skillsSnapshot,
       provider,
       model,
+      hasExplicitModelSelection: modelState.hasExplicitModelSelection,
       authProfileId,
       authProfileIdSource,
       thinkLevel: resolvedThinkLevel,

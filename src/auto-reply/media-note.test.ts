@@ -176,4 +176,62 @@ describe("buildInboundMediaNote", () => {
     // No transcription = keep audio attachment as fallback
     expect(note).toBe("[media attached: /tmp/voice.ogg (audio/ogg)]");
   });
+
+  it("replaces skipped audio attachments with status instead of raw path", () => {
+    const note = buildInboundMediaNote({
+      MediaPaths: ["/tmp/voice.ogg", "/tmp/image.png"],
+      MediaUrls: ["https://example.com/voice.ogg", "https://example.com/image.png"],
+      MediaTypes: ["audio/ogg", "image/png"],
+      MediaUnderstandingDecisions: [
+        {
+          capability: "audio",
+          outcome: "skipped",
+          attachments: [
+            {
+              attachmentIndex: 0,
+              attempts: [
+                {
+                  type: "cli",
+                  outcome: "skipped",
+                  reason: "maxBytes: too large",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(note).toBe(
+      [
+        "[audio status: transcription unavailable (maxBytes)]",
+        "[media attached: /tmp/image.png (image/png) | https://example.com/image.png]",
+      ].join("\n"),
+    );
+  });
+
+  it("returns only audio status when skipped audio is the only attachment", () => {
+    const note = buildInboundMediaNote({
+      MediaPaths: ["/tmp/voice.ogg"],
+      MediaTypes: ["audio/ogg"],
+      MediaUnderstandingDecisions: [
+        {
+          capability: "audio",
+          outcome: "skipped",
+          attachments: [
+            {
+              attachmentIndex: 0,
+              attempts: [
+                {
+                  type: "cli",
+                  outcome: "skipped",
+                  reason: "timeout: too slow",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(note).toBe("[audio status: transcription unavailable (timeout)]");
+  });
 });

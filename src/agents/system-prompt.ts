@@ -268,6 +268,7 @@ export function buildAgentSystemPrompt(params: {
     session_status:
       "Show a /status-equivalent status card (usage + time + Reasoning/Verbose/Elevated); use for model-use questions (📊 session_status); optional per-session model override",
     image: "Analyze an image with the configured image model",
+    transcribe_audio: "Transcribe audio through OpenClaw's configured media pipeline",
   };
 
   const toolOrder = [
@@ -295,6 +296,7 @@ export function buildAgentSystemPrompt(params: {
     "subagents",
     "session_status",
     "image",
+    "transcribe_audio",
   ];
 
   const rawToolNames = (params.toolNames ?? []).map((tool) => tool.trim());
@@ -341,6 +343,7 @@ export function buildAgentSystemPrompt(params: {
   const readToolName = resolveToolName("read");
   const execToolName = resolveToolName("exec");
   const processToolName = resolveToolName("process");
+  const transcribeAudioToolName = resolveToolName("transcribe_audio");
   const extraSystemPrompt = params.extraSystemPrompt?.trim();
   const ownerDisplay = params.ownerDisplay === "hash" ? "hash" : "raw";
   const ownerLine = buildOwnerIdentityLine(
@@ -463,6 +466,9 @@ export function buildAgentSystemPrompt(params: {
     "Keep narration brief and value-dense; avoid repeating obvious steps.",
     "Use plain human language for narration unless in a technical context.",
     "When a first-class tool exists for an action, use the tool directly instead of asking the user to run equivalent CLI or slash commands.",
+    availableTools.has("transcribe_audio")
+      ? `Inbound media may already be preprocessed by OpenClaw. Prefer provided Transcript/media status and injected media context. If you need to transcribe audio yourself, use \`${transcribeAudioToolName}\`. Do not use ${execToolName} to re-transcribe or re-download inbound attachments unless the user explicitly asks you to debug the media pipeline.`
+      : "Inbound media may already be preprocessed by OpenClaw. Prefer provided Transcript/media status and injected media context. Do not use exec to re-transcribe or re-download inbound attachments unless the user explicitly asks you to debug the media pipeline.",
     "",
     ...safetySection,
     "## OpenClaw CLI Quick Reference",

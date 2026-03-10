@@ -127,11 +127,21 @@ async function persistSessionEntry(params: PersistSessionEntryParams): Promise<v
   params.sessionStore[params.sessionKey] = persisted;
 }
 
-function resolveFallbackRetryPrompt(params: { body: string; isFallbackRetry: boolean }): string {
+export function resolveFallbackRetryPrompt(params: {
+  body: string;
+  isFallbackRetry: boolean;
+}): string {
   if (!params.isFallbackRetry) {
     return params.body;
   }
-  return "Continue where you left off. The previous model attempt failed or timed out.";
+  const fallbackLead =
+    "Continue where you left off. The previous model attempt failed or timed out.";
+  const originalTask = params.body.trim();
+  if (originalTask.length === 0) {
+    return fallbackLead;
+  }
+  // Keep retries anchored to the original task to avoid cross-task context drift.
+  return `${fallbackLead}\n\nOriginal task to continue:\n${originalTask}`;
 }
 
 function prependInternalEventContext(
@@ -151,6 +161,7 @@ function prependInternalEventContext(
 function runAgentAttempt(params: {
   providerOverride: string;
   modelOverride: string;
+  hasExplicitModelSelection: boolean;
   cfg: ReturnType<typeof loadConfig>;
   sessionEntry: SessionEntry | undefined;
   sessionId: string;
@@ -312,6 +323,7 @@ function runAgentAttempt(params: {
     clientTools: params.opts.clientTools,
     provider: params.providerOverride,
     model: params.modelOverride,
+    hasExplicitModelSelection: params.hasExplicitModelSelection,
     authProfileId,
     authProfileIdSource: authProfileId ? params.sessionEntry?.authProfileOverrideSource : undefined,
     thinkLevel: params.resolvedThinkLevel,
@@ -844,6 +856,7 @@ async function agentCommandInternal(
           return runAgentAttempt({
             providerOverride,
             modelOverride,
+            hasExplicitModelSelection: Boolean(storedModelOverride),
             cfg,
             sessionEntry,
             sessionId,

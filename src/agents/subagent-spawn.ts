@@ -5,6 +5,8 @@ import { formatThinkingLevels, normalizeThinkLevel } from "../auto-reply/thinkin
 import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
 import { loadConfig } from "../config/config.js";
 import { callGateway } from "../gateway/call.js";
+import { readRecentSessionMessages } from "../gateway/session-utils.fs.js";
+import { loadSessionEntry } from "../gateway/session-utils.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import {
   isValidAgentId,
@@ -91,6 +93,11 @@ export const SUBAGENT_SPAWN_ACCEPTED_NOTE =
   "Auto-announce is push-based. After spawning children, do NOT call sessions_list, sessions_history, exec sleep, or any polling tool. Wait for completion events to arrive as user messages, track expected child session keys, and only send your final answer after ALL expected completions arrive. If a child completion event arrives AFTER your final answer, reply ONLY with NO_REPLY.";
 export const SUBAGENT_SPAWN_SESSION_ACCEPTED_NOTE =
   "thread-bound session stays active after this task; continue in-thread for follow-ups.";
+const SUBAGENT_REQUESTER_CONTEXT_MAX_MESSAGES = 2;
+const SUBAGENT_REQUESTER_CONTEXT_READ_BYTES = 24 * 1024;
+const SUBAGENT_REQUESTER_CONTEXT_MAX_CHARS = 500;
+const TASK_REFERENCE_RE =
+  /https?:\/\/\S+|`[^`\n]+\.[A-Za-z0-9]{1,8}`|\b[\w./-]+\.(?:txt|md|markdown|pdf|docx|csv|json|yml|yaml|png|jpe?g|webp|gif|pptx?|xlsx?)\b|\b\d{15,}\b/i;
 
 export type SpawnSubagentResult = {
   status: "accepted" | "forbidden" | "error";
@@ -180,6 +187,99 @@ function summarizeError(err: unknown): string {
     return err;
   }
   return "error";
+}
+
+function truncateRequesterContextText(text: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= SUBAGENT_REQUESTER_CONTEXT_MAX_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(0, SUBAGENT_REQUESTER_CONTEXT_MAX_CHARS - 1).trimEnd()}…`;
+}
+
+function extractMessageText(message: unknown): string | undefined {
+  if (!message || typeof message !== "object") {
+    return undefined;
+  }
+  const content = (message as { content?: unknown }).content;
+  if (typeof content === "string") {
+    return truncateRequesterContextText(content);
+  }
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+  const textParts = content
+    .flatMap((part) => {
+      if (!part || typeof part !== "object") {
+        return [];
+      }
+      const type = (part as { type?: unknown }).type;
+      const text = (part as { text?: unknown }).text;
+      if (
+        typeof text !== "string" ||
+        (type !== "text" && type !== "input_text" && type !== "output_text")
+      ) {
+        return [];
+      }
+      const normalized = text.trim();
+      return normalized ? [normalized] : [];
+    })
+    .join(" ");
+  return textParts ? truncateRequesterContextText(textParts) : undefined;
+}
+
+function extractConcreteReferences(texts: string[]): string[] {
+  const refs = new Set<string>();
+  for (const text of texts) {
+    for (const match of text.matchAll(
+      /https?:\/\/\S+|`[^`\n]+\.[A-Za-z0-9]{1,8}`|\b[\w./-]+\.(?:txt|md|markdown|pdf|docx|csv|json|yml|yaml|png|jpe?g|webp|gif|pptx?|xlsx?)\b|\b\d{15,}\b/gi,
+    )) {
+      const raw = match[0]?.trim();
+      if (!raw) {
+        continue;
+      }
+      refs.add(raw.replace(/^`|`$/g, ""));
+      if (refs.size >= 8) {
+        return Array.from(refs);
+      }
+    }
+  }
+  return Array.from(refs);
+}
+
+function buildRequesterContextBlock(requesterSessionKey?: string): string | undefined {
+  if (!requesterSessionKey?.trim()) {
+    return undefined;
+  }
+  const { storePath, entry } = loadSessionEntry(requesterSessionKey);
+  if (!entry?.sessionId) {
+    return undefined;
+  }
+  const recentMessages = readRecentSessionMessages(
+    entry.sessionId,
+    storePath,
+    entry.sessionFile,
+    SUBAGENT_REQUESTER_CONTEXT_MAX_MESSAGES * 3,
+    SUBAGENT_REQUESTER_CONTEXT_READ_BYTES,
+  );
+  const requesterTexts = recentMessages
+    .filter((message) => (message as { role?: unknown }).role === "user")
+    .map((message) => extractMessageText(message))
+    .filter((text): text is string => Boolean(text))
+    .slice(-SUBAGENT_REQUESTER_CONTEXT_MAX_MESSAGES);
+  if (requesterTexts.length === 0) {
+    return undefined;
+  }
+  const references = extractConcreteReferences(requesterTexts);
+  const lines = ["[Requester Context]", "Recent requester messages:"];
+  requesterTexts.forEach((text, index) => {
+    lines.push(`${index + 1}. ${text}`);
+  });
+  if (references.length > 0) {
+    lines.push("", "Concrete references:");
+    references.forEach((ref) => lines.push(`- ${ref}`));
+  }
+  return lines.join("\n");
 }
 
 async function ensureThreadBindingForSubagentSpawn(params: {
@@ -693,6 +793,7 @@ export async function spawnSubagentDirect(
       ? "[Subagent Context] This subagent session is persistent and remains available for thread follow-up messages."
       : undefined,
     `[Subagent Task]: ${task}`,
+    TASK_REFERENCE_RE.test(task) ? undefined : buildRequesterContextBlock(requesterSessionKey),
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n\n");

@@ -71,6 +71,21 @@ export function resolveCronDeliveryBestEffort(job: CronJob): boolean {
   return false;
 }
 
+export function shouldUseDirectCronDelivery(params: {
+  deliveryPayloadHasStructuredContent: boolean;
+  threadId?: string | number;
+}): boolean {
+  // Cron output should prefer direct outbound delivery to prevent session
+  // cross-talk when fallback retries resume stale requester contexts.
+  if (params.deliveryPayloadHasStructuredContent) {
+    return true;
+  }
+  if (params.threadId != null) {
+    return true;
+  }
+  return true;
+}
+
 async function resolveCronAnnounceSessionKey(params: {
   cfg: OpenClawConfig;
   agentId: string;
@@ -456,16 +471,10 @@ export async function dispatchCronDelivery(
       };
     }
 
-    // Route text-only cron announce output back through the main session so it
-    // follows the same system-message injection path as subagent completions.
-    // Keep direct outbound delivery only for structured payloads (media/channel
-    // data), which cannot be represented by the shared announce flow.
-    //
-    // Forum/topic targets should also use direct delivery. Announce flow can
-    // be swallowed by ANNOUNCE_SKIP/NO_REPLY in the target agent turn, which
-    // silently drops cron output for topic-bound sessions.
-    const useDirectDelivery =
-      params.deliveryPayloadHasStructuredContent || params.resolvedDelivery.threadId != null;
+    const useDirectDelivery = shouldUseDirectCronDelivery({
+      deliveryPayloadHasStructuredContent: params.deliveryPayloadHasStructuredContent,
+      threadId: params.resolvedDelivery.threadId,
+    });
     if (useDirectDelivery) {
       const directResult = await deliverViaDirect(params.resolvedDelivery);
       if (directResult) {

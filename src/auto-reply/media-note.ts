@@ -46,6 +46,50 @@ function isAudioPath(path: string | undefined): boolean {
   return false;
 }
 
+function summarizeAttemptReason(reason: string | undefined): string | undefined {
+  const trimmed = reason?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const [head] = trimmed.split(":", 1);
+  return head?.trim() || undefined;
+}
+
+function formatAudioStatusLine(status: string): string {
+  return `[audio status: ${status}]`;
+}
+
+function buildAudioStatusByAttachmentIndex(ctx: MsgContext): Map<number, string> {
+  const statuses = new Map<number, string>();
+  if (!Array.isArray(ctx.MediaUnderstandingDecisions)) {
+    return statuses;
+  }
+  for (const decision of ctx.MediaUnderstandingDecisions) {
+    if (decision.capability !== "audio") {
+      continue;
+    }
+    for (const attachment of decision.attachments) {
+      if (attachment.chosen?.outcome === "success" || statuses.has(attachment.attachmentIndex)) {
+        continue;
+      }
+      const reason = attachment.attempts
+        .map((attempt) => summarizeAttemptReason(attempt.reason))
+        .find(Boolean);
+      const baseStatus =
+        decision.outcome === "disabled"
+          ? "transcription disabled"
+          : decision.outcome === "scope-deny"
+            ? "transcription denied"
+            : "transcription unavailable";
+      statuses.set(
+        attachment.attachmentIndex,
+        formatAudioStatusLine(`${baseStatus}${reason ? ` (${reason})` : ""}`),
+      );
+    }
+  }
+  return statuses;
+}
+
 export function buildInboundMediaNote(ctx: MsgContext): string | undefined {
   // Attachment indices follow MediaPaths/MediaUrls ordering as supplied by the channel.
   const suppressed = new Set<number>();
@@ -93,6 +137,7 @@ export function buildInboundMediaNote(ctx: MsgContext): string | undefined {
       ? ctx.MediaTypes
       : undefined;
   const hasTranscript = Boolean(ctx.Transcript?.trim());
+  const audioStatusByIndex = buildAudioStatusByAttachmentIndex(ctx);
   // Transcript alone does not identify an attachment index; only use it as a fallback
   // when there is a single attachment to avoid stripping unrelated audio files.
   const canStripSingleAttachmentByTranscript = hasTranscript && paths.length === 1;
@@ -118,6 +163,9 @@ export function buildInboundMediaNote(ctx: MsgContext): string | undefined {
       if (!isAudioEntry) {
         return true;
       }
+      if (audioStatusByIndex.has(entry.index)) {
+        return false;
+      }
       if (
         transcribedAudioIndices.has(entry.index) ||
         (canStripSingleAttachmentByTranscript && entry.index === 0)
@@ -126,15 +174,25 @@ export function buildInboundMediaNote(ctx: MsgContext): string | undefined {
       }
       return true;
     });
-  if (entries.length === 0) {
+  const audioStatusLines = paths
+    .map((_, index) => audioStatusByIndex.get(index))
+    .filter((entry): entry is string => Boolean(entry));
+  if (entries.length === 0 && audioStatusLines.length === 0) {
     return undefined;
   }
+  if (entries.length === 0) {
+    return audioStatusLines.join("\n");
+  }
+  const parts: string[] = [...audioStatusLines];
   if (entries.length === 1) {
-    return formatMediaAttachedLine({
-      path: entries[0]?.path ?? "",
-      type: entries[0]?.type,
-      url: entries[0]?.url,
-    });
+    parts.push(
+      formatMediaAttachedLine({
+        path: entries[0]?.path ?? "",
+        type: entries[0]?.type,
+        url: entries[0]?.url,
+      }),
+    );
+    return parts.join("\n");
   }
 
   const count = entries.length;
@@ -150,5 +208,6 @@ export function buildInboundMediaNote(ctx: MsgContext): string | undefined {
       }),
     );
   }
-  return lines.join("\n");
+  parts.push(...lines);
+  return parts.join("\n");
 }

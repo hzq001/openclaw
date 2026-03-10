@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { findExtraGatewayServices } from "./inspect.js";
+import { findExtraGatewayServices, renderGatewayServiceCleanupHints } from "./inspect.js";
 
 const { execSchtasksMock } = vi.hoisted(() => ({
   execSchtasksMock: vi.fn(),
@@ -82,6 +82,56 @@ describe("findExtraGatewayServices (win32)", () => {
         marker: "moltbot",
         legacy: true,
       },
+    ]);
+  });
+});
+
+describe("renderGatewayServiceCleanupHints (darwin)", () => {
+  const originalPlatform = process.platform;
+
+  beforeEach(() => {
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      value: "darwin",
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      value: originalPlatform,
+    });
+  });
+
+  it("renders cleanup commands for the detected launch agent label", () => {
+    const hints = renderGatewayServiceCleanupHints(
+      [
+        {
+          platform: "darwin",
+          label: "ai.openclaw.healthcheck",
+          detail: "plist: /Users/test/Library/LaunchAgents/ai.openclaw.healthcheck.plist",
+          scope: "user",
+          marker: "openclaw",
+          legacy: false,
+        },
+      ],
+      { HOME: "/Users/test" },
+    );
+
+    expect(hints).toEqual([
+      "launchctl bootout gui/$UID/ai.openclaw.healthcheck",
+      "rm ~/Library/LaunchAgents/ai.openclaw.healthcheck.plist",
+    ]);
+  });
+
+  it("falls back to the current gateway label when no extra services are detected", () => {
+    const hints = renderGatewayServiceCleanupHints([], {
+      HOME: "/Users/test",
+    });
+
+    expect(hints).toEqual([
+      "launchctl bootout gui/$UID/ai.openclaw.gateway",
+      "rm ~/Library/LaunchAgents/ai.openclaw.gateway.plist",
     ]);
   });
 });
