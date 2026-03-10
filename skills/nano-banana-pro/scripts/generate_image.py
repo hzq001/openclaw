@@ -21,30 +21,52 @@ import os
 import sys
 from pathlib import Path
 
+SUPPORTED_ASPECT_RATIOS = [
+    "1:1",
+    "2:3",
+    "3:2",
+    "3:4",
+    "4:3",
+    "4:5",
+    "5:4",
+    "9:16",
+    "16:9",
+    "21:9",
+]
 
-def get_api_key(provided_key: str | None, base_url: str) -> str | None:
-    """Resolve API key with stable, non-probing rules.
 
-    If base_url points to localhost (our OpenAI-compatible proxy), we must prefer
-    the proxy key; GEMINI_API_KEY is often unrelated and may cause 401.
-
-    Priority (localhost proxy):
-    1) --api-key
-    2) LOCAL_GEMINI_API_KEY
-    3) built-in default: 123456
-
-    Priority (non-local):
-    1) --api-key
-    2) GEMINI_API_KEY
-    3) LOCAL_GEMINI_API_KEY
-    """
+def get_api_key(provided_key: str | None) -> str | None:
+    """Get API key from argument first, then environment."""
     if provided_key:
         return provided_key
+    return os.environ.get("GEMINI_API_KEY")
 
-    if base_url.startswith("http://127.0.0.1") or base_url.startswith("http://localhost"):
-        return os.environ.get("LOCAL_GEMINI_API_KEY") or "123456"
 
-    return os.environ.get("GEMINI_API_KEY") or os.environ.get("LOCAL_GEMINI_API_KEY")
+def auto_detect_resolution(max_input_dim: int) -> str:
+    """Infer output resolution from the largest input image dimension."""
+    if max_input_dim >= 3000:
+        return "4K"
+    if max_input_dim >= 1500:
+        return "2K"
+    return "1K"
+
+
+def choose_output_resolution(
+    requested_resolution: str | None,
+    max_input_dim: int,
+    has_input_images: bool,
+) -> tuple[str, bool]:
+    """Choose final resolution and whether it was auto-detected.
+
+    Auto-detection is only applied when the user did not pass --resolution.
+    """
+    if requested_resolution is not None:
+        return requested_resolution, False
+
+    if has_input_images and max_input_dim > 0:
+        return auto_detect_resolution(max_input_dim), True
+
+    return "1K", False
 
 
 def main():
@@ -71,33 +93,29 @@ def main():
     parser.add_argument(
         "--resolution", "-r",
         choices=["1K", "2K", "4K"],
-        default="1K",
-        help="Output resolution: 1K (default), 2K, or 4K"
+        default=None,
+        help="Output resolution: 1K, 2K, or 4K. If omitted with input images, auto-detect from largest image dimension."
+    )
+    parser.add_argument(
+        "--aspect-ratio", "-a",
+        choices=SUPPORTED_ASPECT_RATIOS,
+        default=None,
+        help=f"Output aspect ratio (default: model decides). Options: {', '.join(SUPPORTED_ASPECT_RATIOS)}"
     )
     parser.add_argument(
         "--api-key", "-k",
-        help="Gemini API key (overrides GEMINI_API_KEY/LOCAL_GEMINI_API_KEY env var)"
-    )
-
-    parser.add_argument(
-        "--base-url",
-        default=(
-            os.environ.get("GEMINI_BASE_URL")
-            or os.environ.get("LOCAL_GEMINI_BASE_URL")
-            or "http://127.0.0.1:8317"
-        ),
-        help=(
-            "Gemini API base URL. Defaults to http://127.0.0.1:8317 for local proxy use. "
-            "Override via --base-url or GEMINI_BASE_URL/LOCAL_GEMINI_BASE_URL."
-        )
+        help="Gemini API key (overrides GEMINI_API_KEY env var)"
     )
 
     args = parser.parse_args()
 
     # Get API key
-    api_key = get_api_key(args.api_key, args.base_url)
+    api_key = get_api_key(args.api_key)
     if not api_key:
-        print("Error: missing API key", file=sys.stderr)
+        print("Error: No API key provided.", file=sys.stderr)
+        print("Please either:", file=sys.stderr)
+        print("  1. Provide --api-key argument", file=sys.stderr)
+        print("  2. Set GEMINI_API_KEY environment variable", file=sys.stderr)
         sys.exit(1)
 
     # Import here after checking API key to avoid slow import on error
@@ -106,13 +124,7 @@ def main():
     from PIL import Image as PILImage
 
     # Initialise client
-    # Support local proxy servers by overriding the base URL.
-    http_options = None
-    if args.base_url:
-        http_options = types.HttpOptions(baseUrl=args.base_url)
-        print(f"Using custom base URL: {args.base_url}")
-
-    client = genai.Client(api_key=api_key, http_options=http_options)
+    client = genai.Client(api_key=api_key)
 
     # Set up output path
     output_path = Path(args.filename)
@@ -120,13 +132,12 @@ def main():
 
     # Load input images if provided (up to 14 supported by Nano Banana Pro)
     input_images = []
-    output_resolution = args.resolution
+    max_input_dim = 0
     if args.input_images:
         if len(args.input_images) > 14:
             print(f"Error: Too many input images ({len(args.input_images)}). Maximum is 14.", file=sys.stderr)
             sys.exit(1)
 
-        max_input_dim = 0
         for img_path in args.input_images:
             try:
                 with PILImage.open(img_path) as img:
@@ -141,15 +152,16 @@ def main():
                 print(f"Error loading input image '{img_path}': {e}", file=sys.stderr)
                 sys.exit(1)
 
-        # Auto-detect resolution from largest input if not explicitly set
-        if args.resolution == "1K" and max_input_dim > 0:  # Default value
-            if max_input_dim >= 3000:
-                output_resolution = "4K"
-            elif max_input_dim >= 1500:
-                output_resolution = "2K"
-            else:
-                output_resolution = "1K"
-            print(f"Auto-detected resolution: {output_resolution} (from max input dimension {max_input_dim})")
+    output_resolution, auto_detected = choose_output_resolution(
+        requested_resolution=args.resolution,
+        max_input_dim=max_input_dim,
+        has_input_images=bool(input_images),
+    )
+    if auto_detected:
+        print(
+            f"Auto-detected resolution: {output_resolution} "
+            f"(from max input dimension {max_input_dim})"
+        )
 
     # Build contents (images first if editing, prompt only if generating)
     if input_images:
@@ -161,23 +173,24 @@ def main():
         print(f"Generating image with resolution {output_resolution}...")
 
     try:
-        # Stable mode: do NOT attempt protocol probing.
-        # Always use Google GenAI SDK against the configured base URL.
-        # Model name can vary by proxy/provider; allow override.
-        # Defaults to a model that is commonly available on the local proxy.
         model_name = (
             os.environ.get("GEMINI_IMAGE_MODEL")
             or os.environ.get("GEMINI_MODEL")
-            or "gemini-3.1-flash-image"
+            or "gemini-3-pro-image-preview"
         )
+
+        # Build image config with optional aspect ratio
+        image_cfg_kwargs = {"image_size": output_resolution}
+        if args.aspect_ratio:
+            image_cfg_kwargs["aspect_ratio"] = args.aspect_ratio
 
         response = client.models.generate_content(
             model=model_name,
             contents=contents,
             config=types.GenerateContentConfig(
                 response_modalities=["TEXT", "IMAGE"],
-                image_config=types.ImageConfig(image_size=output_resolution),
-            ),
+                image_config=types.ImageConfig(**image_cfg_kwargs)
+            )
         )
 
         # Process response and convert to PNG
@@ -212,18 +225,15 @@ def main():
         if image_saved:
             full_path = output_path.resolve()
             print(f"\nImage saved: {full_path}")
-            # OpenClaw parses MEDIA tokens and will attach the file on supported providers.
-            print(f"MEDIA: {full_path}")
+            # OpenClaw parses MEDIA: tokens and will attach the file on
+            # supported chat providers. Emit the canonical MEDIA:<path> form.
+            print(f"MEDIA:{full_path}")
         else:
             print("Error: No image was generated in the response.", file=sys.stderr)
             sys.exit(1)
 
     except Exception as e:
-        # Keep errors short and actionable (avoid noisy stack traces).
-        msg = str(e)
-        if len(msg) > 800:
-            msg = msg[:800] + "…"
-        print(f"Error generating image (genai-sdk): {msg}", file=sys.stderr)
+        print(f"Error generating image: {e}", file=sys.stderr)
         sys.exit(1)
 
 

@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import * as compatSdk from "openclaw/plugin-sdk/compat";
 import * as discordSdk from "openclaw/plugin-sdk/discord";
 import * as imessageSdk from "openclaw/plugin-sdk/imessage";
@@ -58,16 +57,19 @@ describe("plugin-sdk subpath exports", () => {
 
   it("exports Discord helpers", () => {
     expect(typeof discordSdk.resolveDiscordAccount).toBe("function");
+    expect(typeof discordSdk.inspectDiscordAccount).toBe("function");
     expect(typeof discordSdk.discordOnboardingAdapter).toBe("object");
   });
 
   it("exports Slack helpers", () => {
     expect(typeof slackSdk.resolveSlackAccount).toBe("function");
+    expect(typeof slackSdk.inspectSlackAccount).toBe("function");
     expect(typeof slackSdk.handleSlackMessageAction).toBe("function");
   });
 
   it("exports Telegram helpers", () => {
     expect(typeof telegramSdk.resolveTelegramAccount).toBe("function");
+    expect(typeof telegramSdk.inspectTelegramAccount).toBe("function");
     expect(typeof telegramSdk.telegramOnboardingAdapter).toBe("object");
   });
 
@@ -104,20 +106,18 @@ describe("plugin-sdk subpath exports", () => {
     }
   });
 
-  it("resolves Telegram runtime subpath via package exports", () => {
-    const stdout = execFileSync(
-      "node",
-      [
-        "--input-type=module",
-        "-e",
-        "import('openclaw/plugin-sdk/telegram').then(() => process.stdout.write('ok'))",
-      ],
-      {
-        cwd: process.cwd(),
-        encoding: "utf8",
-      },
-    );
+  it("keeps the newly added bundled plugin-sdk contracts available", async () => {
+    const bluebubbles = await import("openclaw/plugin-sdk/bluebubbles");
+    expect(typeof bluebubbles.parseFiniteNumber).toBe("function");
 
-    expect(stdout).toBe("ok");
+    const mattermost = await import("openclaw/plugin-sdk/mattermost");
+    expect(typeof mattermost.parseStrictPositiveInteger).toBe("function");
+
+    const nextcloudTalk = await import("openclaw/plugin-sdk/nextcloud-talk");
+    expect(typeof nextcloudTalk.waitForAbortSignal).toBe("function");
+
+    const twitch = await import("openclaw/plugin-sdk/twitch");
+    expect(typeof twitch.DEFAULT_ACCOUNT_ID).toBe("string");
+    expect(typeof twitch.normalizeAccountId).toBe("function");
   });
 });

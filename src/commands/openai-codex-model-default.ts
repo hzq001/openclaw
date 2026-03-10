@@ -2,7 +2,7 @@ import type { OpenClawConfig } from "../config/config.js";
 import { resolveLocalCodingModelRef } from "../config/local-model-defaults.js";
 import type { AgentModelListConfig } from "../config/types.js";
 
-export const OPENAI_CODEX_DEFAULT_MODEL = "openai-codex/gpt-5.3-codex";
+export const OPENAI_CODEX_DEFAULT_MODEL = "openai-codex/gpt-5.4";
 
 export function resolveOpenAICodexDefaultModel(cfg: OpenClawConfig): string {
   return resolveLocalCodingModelRef(cfg);
