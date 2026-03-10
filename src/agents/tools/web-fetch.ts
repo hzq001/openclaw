@@ -527,6 +527,10 @@ async function runWebFetch(params: WebFetchRuntimeParams): Promise<Record<string
       url: params.url,
       maxRedirects: params.maxRedirects,
       timeoutSeconds: params.timeoutSeconds,
+      // Allow proxy fake-ip DNS answers without broadening web_fetch to other private ranges.
+      policy: {
+        allowRfc2544BenchmarkRange: true,
+      },
       init: {
         headers: {
           Accept: "text/markdown, text/html;q=0.9, */*;q=0.1",

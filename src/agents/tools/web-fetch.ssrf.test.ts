@@ -3,7 +3,7 @@ import * as ssrf from "../../infra/net/ssrf.js";
 import { type FetchMock, withFetchPreconnect } from "../../test-utils/fetch-mock.js";
 
 const lookupMock = vi.fn();
-const resolvePinnedHostname = ssrf.resolvePinnedHostname;
+const resolvePinnedHostnameWithPolicy = ssrf.resolvePinnedHostnameWithPolicy;
 
 function makeHeaders(map: Record<string, string>): { get: (key: string) => string | null } {
   return {
@@ -67,14 +67,17 @@ describe("web_fetch SSRF protection", () => {
   const priorFetch = global.fetch;
 
   beforeEach(() => {
-    vi.spyOn(ssrf, "resolvePinnedHostname").mockImplementation((hostname) =>
-      resolvePinnedHostname(hostname, lookupMock),
+    vi.spyOn(ssrf, "resolvePinnedHostnameWithPolicy").mockImplementation((hostname, params) =>
+      resolvePinnedHostnameWithPolicy(hostname, {
+        ...params,
+        lookupFn: lookupMock,
+      }),
     );
   });
 
   afterEach(() => {
     global.fetch = priorFetch;
-    lookupMock.mockClear();
+    lookupMock.mockReset();
     vi.restoreAllMocks();
   });
 
@@ -114,6 +117,20 @@ describe("web_fetch SSRF protection", () => {
 
     await expectBlockedUrl(tool, "https://private.test/resource", /private|internal|blocked/i);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("allows RFC2544 fake-ip DNS answers for web_fetch", async () => {
+    lookupMock.mockResolvedValue([{ address: "198.18.16.21", family: 4 }]);
+
+    const fetchSpy = setMockFetch().mockResolvedValue(textResponse("ok"));
+    const tool = await createWebFetchToolForTest();
+
+    const result = await tool?.execute?.("call", { url: "https://dw.test/article" });
+    expect(result?.details).toMatchObject({
+      status: 200,
+      extractor: "raw",
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it("blocks redirects to private hosts", async () => {
