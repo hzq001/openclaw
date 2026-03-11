@@ -1,5 +1,9 @@
 import { DEFAULT_CONTEXT_TOKENS } from "../agents/defaults.js";
-import { normalizeProviderId, parseModelRef } from "../agents/model-selection.js";
+import {
+  normalizeModelRef,
+  normalizeProviderId,
+  parseModelRef,
+} from "../agents/model-selection.js";
 import { DEFAULT_AGENT_MAX_CONCURRENT, DEFAULT_SUBAGENT_MAX_CONCURRENT } from "./agent-limits.js";
 import { resolveLocalGeneralModelRef } from "./local-model-defaults.js";
 import { resolveAgentModelPrimaryValue } from "./model-input.js";
@@ -9,6 +13,7 @@ import {
   resolveActiveTalkProviderConfig,
   resolveTalkApiKey,
 } from "./talk.js";
+import type { AgentModelEntryConfig } from "./types.agent-defaults.js";
 import type { OpenClawConfig } from "./types.js";
 import type { ModelDefinitionConfig } from "./types.models.js";
 import { hasConfiguredSecretInput } from "./types.secrets.js";
@@ -35,9 +40,12 @@ const STATIC_DEFAULT_MODEL_ALIASES: Readonly<Record<string, string>> = {
 };
 
 function resolveDefaultModelAliases(cfg: OpenClawConfig): Readonly<Record<string, string>> {
+  const configuredLocalGeneral = cfg.agents?.defaults?.localModels?.general?.trim();
   return {
     ...STATIC_DEFAULT_MODEL_ALIASES,
-    gpt: resolveLocalGeneralModelRef(cfg),
+    gpt: configuredLocalGeneral
+      ? resolveLocalGeneralModelRef(cfg)
+      : STATIC_DEFAULT_MODEL_ALIASES.gpt,
   };
 }
 
@@ -52,6 +60,90 @@ const DEFAULT_MODEL_MAX_TOKENS = 8192;
 
 type ModelDefinitionLike = Partial<ModelDefinitionConfig> &
   Pick<ModelDefinitionConfig, "id" | "name">;
+
+type AgentModelEntryCompatConfig = AgentModelEntryConfig & {
+  provider?: string;
+  model?: string;
+};
+
+function sanitizeAgentModelEntry(
+  entry: AgentModelEntryCompatConfig | undefined,
+): AgentModelEntryConfig {
+  if (!entry || typeof entry !== "object") {
+    return {};
+  }
+  const next: AgentModelEntryConfig = {};
+  if (typeof entry.alias === "string") {
+    next.alias = entry.alias;
+  }
+  if (entry.params && typeof entry.params === "object") {
+    next.params = entry.params;
+  }
+  if (typeof entry.streaming === "boolean") {
+    next.streaming = entry.streaming;
+  }
+  return next;
+}
+
+function normalizeAgentDefaultModels(models: Record<string, AgentModelEntryCompatConfig>): {
+  mutated: boolean;
+  models: Record<string, AgentModelEntryConfig>;
+} {
+  let mutated = false;
+  const normalized: Record<string, AgentModelEntryConfig> = {};
+
+  const mergeEntry = (base: AgentModelEntryConfig, incoming: AgentModelEntryConfig) => {
+    const merged: AgentModelEntryConfig = { ...base };
+    if (incoming.alias !== undefined) {
+      merged.alias = incoming.alias;
+    }
+    if (incoming.params !== undefined) {
+      merged.params = incoming.params;
+    }
+    if (incoming.streaming !== undefined) {
+      merged.streaming = incoming.streaming;
+    }
+    return merged;
+  };
+
+  for (const [rawKey, rawEntry] of Object.entries(models)) {
+    const rawKeyTrimmed = rawKey.trim();
+    if (rawKeyTrimmed !== rawKey) {
+      mutated = true;
+    }
+
+    const entry = rawEntry ?? {};
+    const hasCompatProvider = typeof entry.provider === "string";
+    const hasCompatModel = typeof entry.model === "string";
+    if (hasCompatProvider || hasCompatModel) {
+      mutated = true;
+    }
+
+    let normalizedKey = rawKeyTrimmed;
+    if (!rawKeyTrimmed.includes("/") && hasCompatProvider && hasCompatModel) {
+      const provider = entry.provider?.trim() ?? "";
+      const model = entry.model?.trim() ?? "";
+      if (provider && model) {
+        const ref = normalizeModelRef(provider, model);
+        normalizedKey = `${ref.provider}/${ref.model}`;
+      }
+    }
+    if (normalizedKey !== rawKey) {
+      mutated = true;
+    }
+
+    const sanitizedEntry = sanitizeAgentModelEntry(entry);
+    const existing = normalized[normalizedKey];
+    if (existing) {
+      mutated = true;
+      normalized[normalizedKey] = mergeEntry(existing, sanitizedEntry);
+      continue;
+    }
+    normalized[normalizedKey] = sanitizedEntry;
+  }
+
+  return { mutated, models: normalized };
+}
 
 function resolveDefaultProviderApi(
   providerId: string,
@@ -119,7 +211,7 @@ function resolveAnthropicDefaultAuthMode(cfg: OpenClawConfig): AnthropicAuthDefa
   return null;
 }
 
-function resolvePrimaryModelRef(raw: string | undefined, cfg: OpenClawConfig): string | null {
+function resolvePrimaryModelRef(cfg: OpenClawConfig, raw?: string): string | null {
   if (!raw || typeof raw !== "string") {
     return null;
   }
@@ -320,16 +412,24 @@ export function applyModelDefaults(cfg: OpenClawConfig): OpenClawConfig {
   if (!existingAgent) {
     return mutated ? nextCfg : cfg;
   }
-  const existingModels = existingAgent.models ?? {};
+  const existingModels = (existingAgent.models ?? {}) as Record<
+    string,
+    AgentModelEntryCompatConfig
+  >;
   if (Object.keys(existingModels).length === 0) {
     return mutated ? nextCfg : cfg;
   }
 
-  const nextModels: Record<string, { alias?: string }> = {
-    ...existingModels,
+  const normalizedAgentModels = normalizeAgentDefaultModels(existingModels);
+  if (normalizedAgentModels.mutated) {
+    mutated = true;
+  }
+
+  const nextModels: Record<string, AgentModelEntryConfig> = {
+    ...normalizedAgentModels.models,
   };
 
-  for (const [alias, target] of Object.entries(resolveDefaultModelAliases(nextCfg))) {
+  for (const [alias, target] of Object.entries(resolveDefaultModelAliases(cfg))) {
     const entry = nextModels[target];
     if (!entry) {
       continue;
@@ -475,10 +575,7 @@ export function applyContextPruningDefaults(cfg: OpenClawConfig): OpenClawConfig
       modelsMutated = true;
     }
 
-    const primary = resolvePrimaryModelRef(
-      resolveAgentModelPrimaryValue(defaults.model) ?? undefined,
-      nextCfg,
-    );
+    const primary = resolvePrimaryModelRef(cfg, resolveAgentModelPrimaryValue(defaults.model));
     if (primary) {
       const parsedPrimary = parseModelRef(primary, "anthropic");
       if (isAnthropicCacheRetentionTarget(parsedPrimary)) {

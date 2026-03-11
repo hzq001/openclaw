@@ -1,4 +1,7 @@
-import { normalizeComparableSessionKey } from "../../../../src/routing/session-key.js";
+import {
+  normalizeComparableSessionKey,
+  sessionKeysMatch,
+} from "../../../../src/routing/session-key.js";
 import { resetToolStream } from "../app-tool-stream.ts";
 import { extractText } from "../chat/message-extract.ts";
 import type { GatewayBrowserClient } from "../gateway.ts";
@@ -265,7 +268,7 @@ export function handleChatEvent(state: ChatState, payload?: ChatEventPayload) {
   if (!payload) {
     return null;
   }
-  if (payload.sessionKey !== state.sessionKey) {
+  if (!sessionKeysMatch(payload.sessionKey, state.sessionKey)) {
     return null;
   }
 
